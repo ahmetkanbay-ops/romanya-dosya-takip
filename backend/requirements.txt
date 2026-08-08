@@ -1,7 +1,4 @@
-﻿Flask
-Flask-Cors
-beautifulsoup4
-PyMuPDF
-cloudscraper
+fastapi
+uvicorn
 requests
 gunicorn
