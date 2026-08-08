@@ -1,0 +1,6 @@
+﻿Flask
+Flask-Cors
+beautifulsoup4
+PyMuPDF
+cloudscraper
+requests
