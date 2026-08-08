@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-const API_URL = 'http://192.168.1.12:5000';
+const API_URL = 'https://romanya-dosya-takip.onrender.com';
 export default function HomeScreen() {
   const [dosya, setDosya] = useState('43484');
   const [yukleniyor, setYukleniyor] = useState(false);
