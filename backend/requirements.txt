@@ -4,3 +4,4 @@ beautifulsoup4
 PyMuPDF
 cloudscraper
 requests
+gunicorn
