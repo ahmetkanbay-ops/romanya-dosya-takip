@@ -424,25 +424,54 @@ def _son_basarili_tarama_oku() -> Optional[str]:
         return None
 
 
+
+# Bot'un günlük taraması (09:00, başarısız olursa 6 saat sonra tek seferlik
+# yeniden deneme -- bkz. run_bot notu) normal koşullarda 15:00'e kadar en az
+# bir kez başarıyla biter. Bu eşik, o güvenli aralığa cömert bir pay ekliyor
+# (tatil/hafta sonu gecikmeleri, sunucu yeniden başlatmaları vb. için).
+SON_TARAMA_TAZELIK_ESIGI_SAAT = 30
+
+
 @app.get("/api/durum")
 def site_durumu():
     """Mobil uygulamanın ana ekranında gösterilecek küçük banner için resmi
-    kaynağın (cetatenie.just.ro) anlık erişilebilirliğini kontrol eder.
-    Mesai saatleri dışındaki kesintiler bildirilmez (planlı bakım olabilir)."""
+    kaynağın (cetatenie.just.ro) erişilebilir olup olmadığını bildirir.
+
+    2026-08-18 (canlı hata düzeltmesi -- kullanıcı bildirdi: "ben siteye
+    giriyorum ama uygulama servis dışı diyor"): Bu kontrol önceden CANLI bir
+    HTTP isteği (`requests.get`) atıp anlık durumu ölçüyordu. cetatenie.
+    just.ro'nun bot-engelleme sistemi (bkz. bot.py "2026-08-14 tespiti"
+    notu) JavaScript ÇALIŞTIRAN bir tarayıcı doğrulaması (WAF/Cloudflare
+    tarzı bir "challenge") gerektiriyor -- ne düz `requests` ne de
+    `curl_cffi` (TLS parmak izi taklidi) bunu geçebiliyor, sadece bot.py'nin
+    zaten kullandığı GERÇEK bir tarayıcı (Playwright) geçebiliyor. Yani bu
+    canlı kontrol, site TAMAMEN AÇIKKEN BİLE her zaman "servis dışı"
+    gösteriyordu -- yanlış pozitifti (doğrulandı: hem düz requests hem
+    curl_cffi ile elle test edildi, ikisi de site açıkken 503 aldı).
+    Her istekte tam bir Playwright tarayıcısı açmak da (her uygulama
+    açılışında) sunucuyu gereksiz yere çok yorar.
+    Çözüm: canlı kontrol tamamen kaldırıldı. Bunun yerine, bot.py'nin GERÇEK
+    (Playwright ile başarılı) son taramasının ne kadar TAZE olduğuna
+    bakılıyor -- bu zaten sitenin o taramada erişilebilir olduğunun somut
+    kanıtı. Tarama çok eskiyse (SON_TARAMA_TAZELIK_ESIGI_SAAT'ten fazla,
+    yani günlük taramanın art arda birkaç kez başarısız olduğu anlamına
+    gelir) "servis dışı" gösterilir.
+    """
     son_guncelleme = _son_basarili_tarama_oku()
 
     if not _mesai_saatinde_mi():
         return {"servis_disi": False, "banner_mesaji": None, "son_guncelleme": son_guncelleme}
-    try:
-        yanit = requests.get(
-            RESMI_LISTE_URL, timeout=10,
-            headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"},
-        )
-        erisilebilir = yanit.status_code < 500
-    except Exception:
-        erisilebilir = False
 
-    if erisilebilir:
+    servis_disi = True
+    if son_guncelleme:
+        try:
+            tarama_zamani = datetime.fromisoformat(son_guncelleme)
+            gecen_saat = (datetime.now() - tarama_zamani).total_seconds() / 3600
+            servis_disi = gecen_saat > SON_TARAMA_TAZELIK_ESIGI_SAAT
+        except Exception:
+            servis_disi = False  # bozuk/okunamayan zaman damgasında güvenli tarafta kal
+
+    if not servis_disi:
         return {"servis_disi": False, "banner_mesaji": None, "son_guncelleme": son_guncelleme}
     return {
         "servis_disi": True,
