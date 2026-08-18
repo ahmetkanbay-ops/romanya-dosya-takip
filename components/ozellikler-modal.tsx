@@ -61,7 +61,15 @@ export default function OzelliklerModal({
 }
 
 const styles = StyleSheet.create({
-  disKapsayici: { flex: 1, backgroundColor: LACIVERT },
+  // 2026-08-18 (kullanıcı geri bildirimi -- ekran görüntüsüyle bildirdi):
+  // Ana ekranın başlığındaki dil seçici (zIndex:20) ve bilgi ikonu
+  // (zIndex:10), bu modalın kendisi bir zIndex tanımlamadığı için
+  // modalın ÜSTÜNE sızıyordu -- kapatma butonuyla iç içe geçmiş
+  // görünüyorlardı. React Native'de bir kardeş zIndex tanımladığında,
+  // SIRALAMA artık salt JSX/mount sırasına değil zIndex değerine göre
+  // belirleniyor -- bu yüzden modalın kendi zIndex'i o değerlerin
+  // hepsinden yüksek olmalı.
+  disKapsayici: { flex: 1, backgroundColor: LACIVERT, zIndex: 1000, elevation: 1000 },
   hero: {
     backgroundColor: LACIVERT,
     paddingTop: 54,

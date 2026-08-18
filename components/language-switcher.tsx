@@ -4,6 +4,15 @@ import { DILLER, useDil } from '@/constants/i18n';
 
 type Varyant = 'acik' | 'koyu';
 
+// 2026-08-18 (kullanıcı isteği -- ana ekranda dil seçici SAĞA taşındı):
+// açılır kutu önceden hep `left:0` ile SAĞA doğru açılıyordu -- bu, seçici
+// ekranın sol tarafındayken doğruydu (bkz. disclaimer-gate.tsx, hâlâ
+// solda). Ama ekranın SAĞ kenarına yakın bir seçici için aynı yön kutuyu
+// ekran dışına taşırır. `acilisYonu` ile bu yön bileşeni kullanan ekrana
+// göre seçilebiliyor -- varsayılan 'sag' (eski davranışla birebir aynı,
+// var olan kullanımları bozmuyor).
+type AcilisYonu = 'sag' | 'sol';
+
 // 2026-08-16 (kullanıcı isteğiyle YENİDEN TASARLANDI): önceden üç dilin
 // hepsi (TR/EN/RO) her zaman yan yana görünüyordu. Artık bir AÇILIR MENÜ --
 // sadece o an SEÇİLİ olan dilin bayrağı (uygulama varsayılanı Türkçe olduğu
@@ -15,7 +24,13 @@ type Varyant = 'acik' | 'koyu';
 //  - 'acik'  (varsayılan): beyaz zeminli ekranlarda kullanılır
 //  - 'koyu'  : lacivert başlık kutusunun İÇİNDE kullanılır (ana ekran,
 //              onay ekranı) -- açılır kutunun rengi de koyu zemine göre.
-export default function LanguageSwitcher({ varyant = 'acik' }: { varyant?: Varyant }) {
+export default function LanguageSwitcher({
+  varyant = 'acik',
+  acilisYonu = 'sag',
+}: {
+  varyant?: Varyant;
+  acilisYonu?: AcilisYonu;
+}) {
   const { dil, dilDegistir } = useDil();
   const koyu = varyant === 'koyu';
   const [acikMi, setAcikMi] = useState(false);
@@ -35,7 +50,11 @@ export default function LanguageSwitcher({ varyant = 'acik' }: { varyant?: Varya
       </TouchableOpacity>
 
       {acikMi && (
-        <View style={[styles.acilirKutu, koyu && styles.acilirKutuKoyu]}>
+        <View style={[
+          styles.acilirKutu,
+          acilisYonu === 'sol' ? styles.acilirKutuSola : styles.acilirKutuSaga,
+          koyu && styles.acilirKutuKoyu,
+        ]}>
           {digerDiller.map((d) => (
             <TouchableOpacity
               key={d.kod}
@@ -103,7 +122,6 @@ const styles = StyleSheet.create({
   acilirKutu: {
     position: 'absolute',
     top: '100%',
-    left: 0,
     marginTop: 6,
     backgroundColor: '#fff',
     borderRadius: 10,
@@ -117,6 +135,13 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 8,
   },
+  // acilisYonu='sag' (varsayılan): kutu düğmenin SOL kenarına hizalanır,
+  // SAĞA doğru açılır -- seçici ekranın SOL tarafındayken doğru yön.
+  acilirKutuSaga: { left: 0 },
+  // acilisYonu='sol': kutu düğmenin SAĞ kenarına hizalanır, SOLA doğru
+  // açılır -- seçici ekranın SAĞ kenarına yakınken kutunun ekran dışına
+  // taşmasını önler (bkz. app/(tabs)/index.tsx'teki 2026-08-18 yerleşimi).
+  acilirKutuSola: { right: 0 },
   acilirKutuKoyu: {
     backgroundColor: KART_YUZEY,
     borderColor: KENAR,

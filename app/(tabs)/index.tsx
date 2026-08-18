@@ -390,26 +390,24 @@ export default function IndexScreen() {
           yok -- çizginin kök nedeni tamamen ortadan kalktı. */}
       <View style={styles.heroKart}>
         <Yapraklar />
-        {/* 2026-08-18 (kullanıcı geri bildirimi -- canlı test sırasında:
-            "ikon romanya dosya takip yazısının üstünde tam orta kısmında
-            olmalı, bayrağın arkasına gizlenmiş gibi duruyor"): önceki
-            deneme sağ üst köşede mutlak konumluydu, bayrak rozetine çok
-            yakın/gizli duruyordu. Artık başlık satırının TAM ÜSTÜNDE,
-            ortalanmış, kendi satırında. */}
-        <TouchableOpacity
-          style={styles.bilgiButonu}
-          onPress={() => setOzelliklerGoster(true)}
-          hitSlop={10}
-        >
-          <Text style={styles.bilgiButonuMetin}>ⓘ</Text>
-        </TouchableOpacity>
-        {/* 2026-08-16 (kullanıcı isteği): dil seçici artık ayrı bir satırda
-            değil, başlık satırının BAŞINDA (solunda) -- bayrak rozeti de
-            başlığın SONUNA (sağına) taşındı. */}
+        {/* 2026-08-18 (kullanıcı isteği -- yerleşim değişikliği): bayrak
+            rozeti artık BAŞLIĞIN SOLUNDA, dil seçici SAĞINDA -- önceki
+            düzenin (dil solda, bayrak sağda) tam tersi. Özellikler (bilgi)
+            ikonu artık ortada/üstte değil, dil seçicinin HEMEN ALTINDA,
+            sağ tarafta dikey olarak istifleniyor. */}
         <View style={styles.appAdiSatir}>
-          <LanguageSwitcher varyant="koyu" />
-          <Text style={styles.headerTitle}>{t.appAdi}</Text>
           <BayrakRozeti />
+          <Text style={styles.headerTitle}>{t.appAdi}</Text>
+          <View style={styles.sagUstKontroller}>
+            <LanguageSwitcher varyant="koyu" acilisYonu="sol" />
+            <TouchableOpacity
+              style={styles.bilgiButonu}
+              onPress={() => setOzelliklerGoster(true)}
+              hitSlop={10}
+            >
+              <Text style={styles.bilgiButonuMetin}>ⓘ</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
       <KeyboardAvoidingView
@@ -687,11 +685,14 @@ const styles = StyleSheet.create({
   },
   appAdiSatir: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 14 },
   headerTitle: { fontSize: 21, fontWeight: 'bold', color: '#fff' },
-  // 2026-08-18: "Özellikler" sayfasını açan bilgi ikonu -- başlık satırının
-  // TAM ÜSTÜNDE, ortalanmış kendi satırında (kullanıcı geri bildirimi:
-  // sağ üst köşede bayrak rozetine çok yakın/gizli duruyordu).
+  // 2026-08-18 (kullanıcı isteği -- yerleşim değişikliği): dil seçici ve
+  // "Özellikler" bilgi ikonu artık SAĞ tarafta, dikey olarak üst üste
+  // istifleniyor (dil üstte, bilgi ikonu hemen altında).
+  sagUstKontroller: {
+    alignItems: 'center',
+    gap: 6,
+  },
   bilgiButonu: {
-    alignSelf: 'center',
     width: 30,
     height: 30,
     borderRadius: 15,
