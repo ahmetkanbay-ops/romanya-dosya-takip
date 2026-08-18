@@ -198,7 +198,7 @@ Sorularınız için: ahmet.knby.25@gmail.com`,
       { ikon: '📄', baslik: 'Resmi Belge Görüntüleme', aciklama: 'Sistemin sizin için bulduğu resmi PDF belgesini uygulamadan doğrudan açıp inceleyin.' },
       { ikon: '🌐', baslik: '3 Dil Desteği', aciklama: 'Türkçe, İngilizce ve Romence arasında anında geçiş yapın.' },
       { ikon: '🔒', baslik: 'Gizlilik Odaklı', aciklama: 'Ad, TC/CNP kimlik numarası, adres gibi hiçbir kişisel bilginiz istenmez ya da saklanmaz.' },
-      { ikon: '💳', baslik: 'Tek Seferlik Satın Alma', aciklama: 'Satın aldığınız uygulamayı, Google hesabınızla giriş yaptığınız istediğiniz kadar cihaza ücretsiz olarak tekrar yükleyebilirsiniz -- telefon değiştirseniz, kaybetseniz ya da bozulsa bile tekrar ödeme yapmanız gerekmez.' },
+      { ikon: '💳', baslik: 'Tek Seferlik Satın Alma', aciklama: 'Satın aldığınız uygulamayı, aynı Google hesabıyla istediğiniz kadar cihaza ücretsiz olarak tekrar yükleyebilirsiniz -- telefon değiştirseniz, kaybetseniz ya da bozulsa bile tekrar ödeme yapmanız gerekmez.' },
     ],
   },
   en: {
