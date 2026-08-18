@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BayrakRozeti, BayrakNoktalari } from '@/components/flag-mark';
 import LanguageSwitcher from '@/components/language-switcher';
 import Yapraklar from '@/components/yapraklar';
@@ -51,17 +51,39 @@ export default function DisclaimerGate({ children }: { children: React.ReactNode
     setGosterilsin(false);
   };
 
-  // AsyncStorage kontrolü bitene kadar hiçbir şey gösterme (kısa an için
-  // ana ekranın "yanıp sönmesini" engeller).
+  // 2026-08-18 (kullanıcı geri bildirimi -- "açılışta beyaz ekran"):
+  // AsyncStorage kontrolü (yukarıdaki useEffect) bitene kadar önceden
+  // `null` döndürülüyordu -- React `null` için HİÇBİR ŞEY render etmez,
+  // bu da native splash kapandıktan SONRA, gerçek içerik (children) daha
+  // mount OLMADAN önce, altındaki varsayılan (BEYAZ) zemin rengin
+  // görünmesine sebep oluyordu. adb ile alınan kare kare ekran
+  // görüntüleriyle doğrulandı: splash'ten sonra birkaç saniye boyunca
+  // tamamen beyaz bir ekran sabit kalıyordu. Çözüm: `null` yerine,
+  // uygulamanın gerçek zemin rengiyle (LACIVERT) dolu boş bir View
+  // döndürülüyor -- kontrol ne kadar sürerse sürsün, kullanıcı beyaz
+  // değil, uygulamanın kendi rengini görüyor.
   if (yukleniyor) {
-    return null;
+    return <View style={{ flex: 1, backgroundColor: LACIVERT }} />;
   }
 
   return (
     <>
       {children}
-      <Modal visible={gosterilsin} animationType="fade" transparent={false}>
-        <View style={styles.disKapsayici}>
+      {/* 2026-08-18 (kullanıcı geri bildirimi -- "açılışta beyaz ekran",
+          devamı): Yukarıdaki `yukleniyor` düzeltmesi tek başına yeterli
+          olmadı -- adb ile kare kare doğrulandı, beyaz ekran hâlâ
+          sürüyordu. Gerçek kök neden burasıydı: Android'de RN'in `<Modal>`
+          bileşeni (özellikle transparent={false} iken) kendi AYRI native
+          penceresini açar -- bu pencere, içine JS içeriği (aşağıdaki
+          lacivert View) çizilmeden ÖNCE, Android'in kendi varsayılan
+          (BEYAZ) pencere zeminini bir süre gösterebiliyor (bilinen bir RN/
+          Android davranışı). `Modal` tamamen kaldırılıp, aynı ekranı
+          normal bir "üst üste binen" (absolute overlay) View olarak
+          render etmeye geçildi -- bu şekilde ayrı bir pencere hiç
+          açılmıyor, içerik doğrudan zaten çizili olan (lacivert) ana
+          yüzeyin üzerine, native bir beyaz an olmadan biniyor. */}
+      {gosterilsin && (
+        <View style={[StyleSheet.absoluteFill, styles.disKapsayici]}>
           {/* Ana ekranla (index.tsx) BİREBİR aynı: tam genişlik, köşesiz,
               düz lacivert başlık + arkasında yavaşça süzülen yapraklar. */}
           <View style={styles.hero}>
@@ -83,7 +105,7 @@ export default function DisclaimerGate({ children }: { children: React.ReactNode
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      )}
     </>
   );
 }

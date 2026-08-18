@@ -1,5 +1,4 @@
 import Constants from 'expo-constants';
-import * as Crypto from 'expo-crypto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // YEDEK (fallback) yerel IP -- Faz 3'te Render'a taşındığında bu satır ve
@@ -52,20 +51,23 @@ export const APP_KEY = process.env.EXPO_PUBLIC_APP_KEY || '';
 const CIHAZ_KIMLIGI_ANAHTARI = 'cihaz_kimligi_v1';
 let bellekteCihazKimligi: string | null = null;
 
-// 2026-08-18 (güvenlik denetimi madde 6): Math.random() kriptografik
-// amaçlar için güvenli değil -- bu kimlik hem favoriler hem (bkz.
-// backend main.py _otomatik_izlemeye_al) otomatik izleme için TEK
-// yetkilendirme faktörü olduğundan, expo-crypto'nun kriptografik güvenli
-// rastgele sayı üretecine (getRandomBytesAsync) geçildi. ÖNEMLİ: mevcut
-// kurulumların AsyncStorage'da zaten kayıtlı kimlikleri DEĞİŞMEZ (bkz.
-// cihazKimligiGetir -- önce her zaman kayıtlı değeri okur) -- bu, sadece
-// YENİ kurulumlarda üretilecek kimlikleri güçlendiriyor.
-async function rastgeleKimlikUret(): Promise<string> {
-  const baytlar = await Crypto.getRandomBytesAsync(16); // 128 bit
-  const onaltilikDize = Array.from(baytlar)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  return `cihaz-${onaltilikDize}`;
+// 2026-08-18 (güvenlik denetimi madde 6 -- GEÇİCİ OLARAK GERİ ALINDI):
+// expo-crypto'nun getRandomBytesAsync'ine geçilmişti, ama bu NATIVE kod
+// içeren bir modül -- telefondaki dev client (EAS build) bu paket
+// eklenmeden ÖNCE derlendiği için "Cannot find native module 'ExpoCrypto'"
+// hatasıyla uygulama AÇILIŞTA ÇÖKÜYORDU (beyaz ekran olarak görünüyordu).
+// Native modül gerektiren bir paket, yeni bir "eas build" ile telefona
+// yeniden yüklenmeden JS tarafından kullanılamıyor -- sadece "npx expo
+// install" + kod değişikliği yeterli değil. Play Store'a hazırlanırken
+// zaten yeni bir native build yapılacak (bkz. yapılacaklar listesi) --
+// o build'den SONRA bu fonksiyon tekrar Crypto.getRandomBytesAsync'e
+// geçirilmeli (expo-crypto paketi package.json'da hâlâ duruyor, sadece
+// burada kullanılmıyor). Şimdilik Math.random() tabanlı eski yönteme
+// dönüldü -- düşük risk (sadece bir cihaz kimliği, şifre/token değil),
+// uygulamanın çalışır olması daha öncelikli.
+function rastgeleKimlikUret(): string {
+  const rastgele = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  return `cihaz-${rastgele}`;
 }
 
 /**
@@ -85,14 +87,14 @@ export async function cihazKimligiGetir(): Promise<string> {
       bellekteCihazKimligi = kayitli;
       return kayitli;
     }
-    const yeni = await rastgeleKimlikUret();
+    const yeni = rastgeleKimlikUret();
     await AsyncStorage.setItem(CIHAZ_KIMLIGI_ANAHTARI, yeni);
     bellekteCihazKimligi = yeni;
     return yeni;
   } catch {
     // AsyncStorage'a hiç yazılamazsa bile (çok nadir) oturum boyunca
     // geçerli bir kimlikle devam edebilelim diye bellekte üretiyoruz.
-    const gecici = await rastgeleKimlikUret();
+    const gecici = rastgeleKimlikUret();
     bellekteCihazKimligi = gecici;
     return gecici;
   }
