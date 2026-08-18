@@ -41,3 +41,25 @@ app-example
 # generated native folders
 /ios
 /android
+
+# --- Backend: sırlar ve kişisel veri, ASLA repoya girmemeli ---
+# Telegram/SMTP token'ları, APP_API_KEY vb. burada tutuluyor.
+backend/.env
+.env
+# İndirilen resmi PDF'ler ve veritabanı: başvuru sahiplerinin dosya
+# numaralarını/kişisel verilerini içeriyor + veritabanı çok büyüyebiliyor
+# (repoyu şişirir). Bunlar sunucuda/Render'da kalmalı, git'e girmemeli.
+backend/pdfs/
+backend/dosyalar.db
+# 2026-08-17: otomatik gece yedekleri (main.py -- veritabani_yedekle) de
+# aynı gerekçeyle git'e girmemeli (büyük .db kopyaları, kişisel veri).
+backend/yedekler/
+# Bot'un kategori bulamadığında kaydettiği teşhis HTML/ekran görüntüleri --
+# sadece yerel hata ayıklama içindir.
+backend/teshis/
+# Bot'un her taramadan sonra yazdığı "son başarılı tarama" zaman damgası --
+# üretilen/değişken bir durum dosyası, git'e girmemeli.
+backend/son_basarili_tarama.txt
+backend/__pycache__/
+__pycache__/
+*.pyc

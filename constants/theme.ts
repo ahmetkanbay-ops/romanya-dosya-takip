@@ -5,8 +5,10 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+// Romanya Dosya Takip marka rengi: koyu lacivert/antrasit + altın
+// (2026-08-15) -- app/(tabs)/index.tsx ile BİREBİR aynı.
+const tintColorLight = '#131C30';
+const tintColorDark = '#E3A83B';
 
 export const Colors = {
   light: {
