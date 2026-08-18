@@ -21,6 +21,7 @@ import secrets
 import sqlite3
 import time
 import requests
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 from urllib.parse import quote
@@ -320,9 +321,19 @@ def veritabani_yedekle():
             pass  # admin uyarısı bile başarısız olursa yedekleme sürecini bozmasın
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Uygulama başladığında scheduler'ı başlat"""
+# 2026-08-18: eski @app.on_event("startup"/"shutdown") -- FastAPI'de
+# deprecated, ileride tamamen kaldırılacak (bkz. DeprecationWarning).
+# Yerine önerilen "lifespan" context manager kullanılıyor. ÖNEMLİ: bu
+# fonksiyon, üstünde durduğu `app = FastAPI()` satırından (yukarıda, çok
+# daha erken) SONRA tanımlanıyor -- bu sorun değil, çünkü Python fonksiyon
+# GÖVDESİNİ (scheduler/run_bot/veritabani_yedekle isimlerini) sadece
+# fonksiyon ÇAĞRILDIĞINDA çözer, tanımlandığı anda değil. `app`'a bağlamak
+# için de constructor'a taşımak yerine `app.router.lifespan_context`'e
+# atama yapılıyor (Starlette'in desteklediği, dosyanın baştan aşağı
+# yeniden düzenlenmesini gerektirmeyen bir yöntem).
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Uygulama başlarken scheduler'ı kur, kapanırken durdur."""
     # 2026-08-15: cetatenie.just.ro, günde 5 kez (08-17 arası 2 saatte bir)
     # yapılan taramayı kötüye kullanım sayıp IP adresini bloke etti. Bu
     # yüzden sıklık günde SADECE 1 keze düşürüldü. Ayrıca bot.py artık
@@ -353,12 +364,13 @@ async def startup_event():
     print(f"✓ Yedekleme: Her gün 03:00'te otomatik veritabanı yedeği alınacak (son {YEDEK_SAKLAMA_GUN_SAYISI} gün saklanır)")
     print(f"✓ Sonraki çalışma: Zamanı gelince otomatik çalışır\n")
 
+    yield
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Uygulama kapanırken scheduler'ı durdur"""
     scheduler.shutdown()
     print("✓ Scheduler durduruldu.")
+
+
+app.router.lifespan_context = lifespan
 
 
 # 2026-08-15 (güvenlik sıkılaştırması): tüm alanlara üst uzunluk sınırı
