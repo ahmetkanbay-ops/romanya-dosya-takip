@@ -23,6 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BayrakRozeti } from '@/components/flag-mark';
 import KonfettiYagmuru from '@/components/confetti';
 import LanguageSwitcher from '@/components/language-switcher';
+import OzelliklerModal from '@/components/ozellikler-modal';
 import SorguSovu, { TOPLAM_SOV_SURESI_MS } from '@/components/sorgu-sovu';
 import Yapraklar from '@/components/yapraklar';
 import { apiIstek, cihazKimligiGetir } from '@/constants/api';
@@ -96,6 +97,10 @@ export default function IndexScreen() {
   const [sonGuncelleme, setSonGuncelleme] = useState<string | null>(null);
   const [konfetiGoster, setKonfetiGoster] = useState(false);
   const [konfetiAnahtari, setKonfetiAnahtari] = useState(0);
+  // 2026-08-18 EKLENTİSİ (kullanıcı isteği: "kullanıcılar uygulamanın
+  // bütün özelliklerini bilmeleri çok güzel olur") -- Ana Sayfa'daki
+  // bilgi (i) ikonuyla açılan "Özellikler" sayfasının görünürlüğü.
+  const [ozelliklerGoster, setOzelliklerGoster] = useState(false);
   // 2026-08-16 (kullanıcı testinde bulunan tasarım hatası düzeltmesi):
   // önceden TEK bir global "Favorilere Ekle" butonu vardı ve sadece arama
   // kutusundaki HAM metni gönderiyordu -- birden fazla sonuç kartı varsa
@@ -385,6 +390,19 @@ export default function IndexScreen() {
           yok -- çizginin kök nedeni tamamen ortadan kalktı. */}
       <View style={styles.heroKart}>
         <Yapraklar />
+        {/* 2026-08-18 (kullanıcı geri bildirimi -- canlı test sırasında:
+            "ikon romanya dosya takip yazısının üstünde tam orta kısmında
+            olmalı, bayrağın arkasına gizlenmiş gibi duruyor"): önceki
+            deneme sağ üst köşede mutlak konumluydu, bayrak rozetine çok
+            yakın/gizli duruyordu. Artık başlık satırının TAM ÜSTÜNDE,
+            ortalanmış, kendi satırında. */}
+        <TouchableOpacity
+          style={styles.bilgiButonu}
+          onPress={() => setOzelliklerGoster(true)}
+          hitSlop={10}
+        >
+          <Text style={styles.bilgiButonuMetin}>ⓘ</Text>
+        </TouchableOpacity>
         {/* 2026-08-16 (kullanıcı isteği): dil seçici artık ayrı bir satırda
             değil, başlık satırının BAŞINDA (solunda) -- bayrak rozeti de
             başlığın SONUNA (sağına) taşındı. */}
@@ -617,6 +635,15 @@ export default function IndexScreen() {
           </View>
         </View>
       </Modal>
+      {/* 2026-08-18: OzelliklerModal, düz bir absolute-overlay View (RN'in
+          <Modal>'i DEĞİL -- bkz. component içindeki not, disclaimer-gate.tsx
+          ile aynı ders). Bu yüzden RN Modal'ın aksine kendi ayrı bir katmanı
+          yok -- kardeşler arasında SIRALAMA önemli, en son render edilen en
+          üstte görünür. İLK DENEMEDE heroKart'ın hemen altına konmuştu, bu
+          da ScrollView içeriğinin ÜSTÜNDE kalmasını engelliyordu (adb ile
+          çekilen ekran görüntüsüyle doğrulandı, metinler iç içe geçmişti).
+          Doğru yer: bu return'ün EN SONU. */}
+      <OzelliklerModal gorunur={ozelliklerGoster} kapat={() => setOzelliklerGoster(false)} />
     </SafeAreaView>
   );
 }
@@ -660,6 +687,20 @@ const styles = StyleSheet.create({
   },
   appAdiSatir: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 14 },
   headerTitle: { fontSize: 21, fontWeight: 'bold', color: '#fff' },
+  // 2026-08-18: "Özellikler" sayfasını açan bilgi ikonu -- başlık satırının
+  // TAM ÜSTÜNDE, ortalanmış kendi satırında (kullanıcı geri bildirimi:
+  // sağ üst köşede bayrak rozetine çok yakın/gizli duruyordu).
+  bilgiButonu: {
+    alignSelf: 'center',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  bilgiButonuMetin: { color: '#fff', fontSize: 17, fontWeight: 'bold' },
   servisDisiBanner: {
     backgroundColor: '#FBE9E7',
     borderWidth: 1,

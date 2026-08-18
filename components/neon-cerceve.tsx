@@ -34,6 +34,14 @@ export const SEKME_CUBUGU_ICERIK_YUKSEKLIGI = 58;
 //     ikonlara zaten yukarıdan pay veriyor, ışımanın en yoğun kısmı bu
 //     boşluğa denk geliyor.
 // Canlı cihazda (adb screencap ile) piksel piksel doğrulandı.
+//
+// 2026-08-18 TEŞHİS NOTU: "açılışta beyaz ekran" şikayeti üzerine bu
+// bileşen şüpheli görülüp adb ile A/B testine tabi tutuldu -- ilk testte
+// (tek örnekle) suçlu gibi göründü, ama sonraki TEKRARLI testlerde
+// (bileşen tamamen kapalıyken bile beyaz ekranın YİNE çıktığı görüldü)
+// bunun YANLIŞ bir sonuç (cihazın o anki rastgele yavaşlığı) olduğu
+// anlaşıldı. Bu bileşenin beyaz ekranla HİÇBİR İLGİSİ YOK -- kod
+// olduğu gibi (değişiklik yapılmadan) bırakıldı.
 export default function NeonCerceve({
   renk = '#E3A83B',
   kirmiziRenk = '#FF3345',

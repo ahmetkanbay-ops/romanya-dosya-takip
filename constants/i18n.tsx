@@ -184,6 +184,21 @@ Sorularınız için: ahmet.knby.25@gmail.com`,
     favoridenCikarButon: 'Çıkar',
     favorilerimYenile: 'Yenile',
     favorilerimHenuzSonucYok: 'Bu numara için henüz kayıtlı bir sonuç yok, taranmaya devam ediliyor.',
+    // 2026-08-18 EKLENTİSİ (kullanıcı isteği): Ana Sayfa'daki bilgi (i)
+    // ikonuyla açılan "Özellikler" sayfası -- uygulamanın kullanıcılara
+    // sunduğu hizmetleri tek bir yerde özetler, kullanıcı Play Store'da
+    // görmese bile uygulama içinden tüm özellikleri keşfedebilsin diye.
+    ozelliklerBaslik: 'Uygulama Özellikleri',
+    ozelliklerAciklama: 'Romanya Dosya Takip, vatandaşlık başvuru sürecinizi kolaylaştırmak için şu hizmetleri sunar:',
+    ozellikler: [
+      { ikon: '🔍', baslik: 'Anında Sorgulama', aciklama: 'Dosya numaranızı girin, Stadiu Dosar ve Ordine kategorilerinde saniyeler içinde güncel durumunuzu görün.' },
+      { ikon: '🔔', baslik: 'Otomatik Bildirim', aciklama: 'Favorilere eklemeseniz bile, sorguladığınız bir dosya numarası onaylandığında size otomatik bildirim gönderilir.' },
+      { ikon: '⭐', baslik: 'Favorilerim', aciklama: 'Takip etmek istediğiniz dosya numaralarını favorilere ekleyin, tek ekrandan hepsinin güncel durumunu görün.' },
+      { ikon: '📊', baslik: 'İstatistikler', aciklama: 'Sıranızdaki tahmini yerinizi görün, genel başvuru istatistiklerini ve yıllara göre dağılımı inceleyin.' },
+      { ikon: '📄', baslik: 'Resmi Belge Görüntüleme', aciklama: 'Sistemin sizin için bulduğu resmi PDF belgesini uygulamadan doğrudan açıp inceleyin.' },
+      { ikon: '🌐', baslik: '3 Dil Desteği', aciklama: 'Türkçe, İngilizce ve Romence arasında anında geçiş yapın.' },
+      { ikon: '🔒', baslik: 'Gizlilik Odaklı', aciklama: 'Ad, TC/CNP kimlik numarası, adres gibi hiçbir kişisel bilginiz istenmez ya da saklanmaz.' },
+    ],
   },
   en: {
     appAdi: 'Romania File Tracker',
@@ -305,6 +320,17 @@ For questions: ahmet.knby.25@gmail.com`,
     favoridenCikarButon: 'Remove',
     favorilerimYenile: 'Refresh',
     favorilerimHenuzSonucYok: 'No record for this number yet, scanning continues.',
+    ozelliklerBaslik: 'App Features',
+    ozelliklerAciklama: 'Romania File Tracker offers the following services to make your citizenship application process easier:',
+    ozellikler: [
+      { ikon: '🔍', baslik: 'Instant Search', aciklama: 'Enter your file number and see your current status in the Stadiu Dosar and Ordine categories within seconds.' },
+      { ikon: '🔔', baslik: 'Automatic Notifications', aciklama: 'Even without adding it to favorites, you get notified automatically when a file number you searched for gets approved.' },
+      { ikon: '⭐', baslik: 'My Favorites', aciklama: 'Add the file numbers you want to track to favorites and see their current status all on one screen.' },
+      { ikon: '📊', baslik: 'Statistics', aciklama: 'See your estimated position in the queue and review overall application statistics and the yearly breakdown.' },
+      { ikon: '📄', baslik: 'Official Document Viewer', aciklama: 'Open and review the official PDF document the system found for you, directly within the app.' },
+      { ikon: '🌐', baslik: '3 Language Support', aciklama: 'Switch instantly between Turkish, English, and Romanian.' },
+      { ikon: '🔒', baslik: 'Privacy-Focused', aciklama: 'No personal information such as your name, national ID number, or address is ever requested or stored.' },
+    ],
   },
   ro: {
     appAdi: 'Urmărire Dosar România',
@@ -426,6 +452,17 @@ Pentru întrebări: ahmet.knby.25@gmail.com`,
     favoridenCikarButon: 'Elimină',
     favorilerimYenile: 'Reîmprospătează',
     favorilerimHenuzSonucYok: 'Nu există încă o înregistrare pentru acest număr, scanarea continuă.',
+    ozelliklerBaslik: 'Funcțiile Aplicației',
+    ozelliklerAciklama: 'Romanya Dosya Takip oferă următoarele servicii pentru a vă simplifica procesul de cerere de cetățenie:',
+    ozellikler: [
+      { ikon: '🔍', baslik: 'Căutare Instantanee', aciklama: 'Introduceți numărul dosarului și vedeți starea actuală în categoriile Stadiu Dosar și Ordine în câteva secunde.' },
+      { ikon: '🔔', baslik: 'Notificări Automate', aciklama: 'Chiar dacă nu îl adăugați la favorite, sunteți notificat automat atunci când un număr de dosar căutat este aprobat.' },
+      { ikon: '⭐', baslik: 'Favoritele Mele', aciklama: 'Adăugați numerele de dosar pe care doriți să le urmăriți la favorite și vedeți starea lor actuală pe un singur ecran.' },
+      { ikon: '📊', baslik: 'Statistici', aciklama: 'Vedeți poziția estimată în coadă și consultați statisticile generale ale cererilor, precum și distribuția pe ani.' },
+      { ikon: '📄', baslik: 'Vizualizare Document Oficial', aciklama: 'Deschideți și consultați documentul PDF oficial găsit de sistem pentru dvs., direct din aplicație.' },
+      { ikon: '🌐', baslik: 'Suport pentru 3 Limbi', aciklama: 'Comutați instantaneu între turcă, engleză și română.' },
+      { ikon: '🔒', baslik: 'Axat pe Confidențialitate', aciklama: 'Nicio informație personală precum numele, CNP-ul sau adresa dvs. nu este niciodată solicitată sau stocată.' },
+    ],
   },
 } as const;
 

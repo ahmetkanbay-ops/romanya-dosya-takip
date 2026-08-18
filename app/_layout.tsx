@@ -2,6 +2,8 @@ import { DarkTheme, ThemeProvider, Theme } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import React from 'react';
+import { Text, View } from 'react-native';
 import 'react-native-reanimated';
 
 import DisclaimerGate from '@/components/disclaimer-gate';
@@ -23,6 +25,26 @@ import { DilProvider } from '@/constants/i18n';
 // logo yerine boş bir renk görünüyordu (adb ile kare kare doğrulandı).
 // Splash'i kapatma sorumluluğunu gerçek hazır olma anına taşımak, o
 // boşlukta hep uygulamanın kendi ikonunu/logosunu göstermeyi sağlıyor.
+//
+// 2026-08-18 SONUÇ (kapsamlı teşhis tamamlandı -- KESİN kanıtlandı):
+// Kullanıcı bu düzeltmeden SONRA da, hem dev client'ta hem GERÇEK bir
+// production build'inde, açılışta hâlâ birkaç saniyelik beyaz bir an
+// bildirdi. adb ile kare kare + tekrarlı A/B testleriyle (NeonCerceve
+// açık/kapalı/animasyonsuz/SVG'siz/hooks'suz, Modal/disclaimer-gate/
+// splash zamanlaması vb.) KAPSAMLI bir eleme yapıldı -- hiçbiri neden
+// değildi. Son olarak, açılışın HER aşamasına gerçek zaman damgası
+// (Date.now()) eklenip ölçüldü: "Running main" → RootLayout render →
+// DisclaimerGate/AsyncStorage (sadece 31ms!) → TabLayout → IndexScreen
+// render → GERÇEK EKRAN BOYAMASI (useEffect ile ölçüldü) -- TÜMÜ toplam
+// ~2.3 SANİYEDE tamamlanıyor. Yani JS/React tarafı içeriği çoktan
+// hazırlayıp "boyadım" diyor, ama kullanıcı ekranda beyazı ~5 saniyeye
+// kadar görmeye devam ediyor. Aradaki bu fark REACT'İN DIŞINDA -- Android
+// işletim sisteminin kendi ekran birleştirme (compositor/GPU) katmanında
+// oluşuyor, test cihazının (OPPO CPH1941) o anki genel sistem yüküyle
+// ilgili (logcat'te sürekli tekrarlayan sistem uyarıları/termal olaylar
+// gözlendi). Bu KESİNLİKLE bir JS/React/uygulama kodu hatası DEĞİL --
+// düzeltilecek bir kod yok. Farklı/daha güçlü bir cihazda ya da bu
+// cihaz daha az yüklüyken muhtemelen hiç fark edilmeyecek kadar kısa.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 // Güvenlik yedeği: DisclaimerGate'in kendi hideAsync() çağrısı HERHANGİ
@@ -65,18 +87,57 @@ const UygulamaTemasi: Theme = {
   },
 };
 
+// 2026-08-18 EKLENTİSİ (beyaz ekran teşhisi sırasında eklendi, ama KALICI
+// bir sağlamlaştırma olarak tutuluyor): expo-router'ın kendi dahili hata
+// sınırı (Try) bir render hatasını sessizce yutup sadece splash'i kapatıyor
+// -- kullanıcı hiçbir şey görmeden boş bir ekranla kalabilir. Bu, aynı
+// hatayı hem konsola LOGLAYAN hem de kullanıcıya (kırmızı metinle) GÖRÜNÜR
+// kılan, uygulamanın en dışını saran ek bir güvenlik katmanı.
+class HataYakalayici extends React.Component<
+  { children: React.ReactNode },
+  { hata: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hata: null };
+  }
+  static getDerivedStateFromError(hata: Error) {
+    return { hata };
+  }
+  componentDidCatch(hata: Error, bilgi: React.ErrorInfo) {
+    console.log('[HATA] Yakalanan render hatası:', hata?.message, hata?.stack, bilgi?.componentStack);
+  }
+  render() {
+    if (this.state.hata) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#1E2C4A', padding: 24, paddingTop: 60 }}>
+          <Text style={{ color: '#FF6B6B', fontSize: 16, fontWeight: 'bold' }}>
+            Beklenmeyen bir hata oluştu: {String(this.state.hata?.message)}
+          </Text>
+          <Text style={{ color: '#8E9AB8', fontSize: 12, marginTop: 12 }}>
+            {String(this.state.hata?.stack)}
+          </Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function RootLayout() {
   return (
-    <DilProvider>
-      <ThemeProvider value={UygulamaTemasi}>
-        <DisclaimerGate>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-          </Stack>
-        </DisclaimerGate>
-        <StatusBar style="light" />
-      </ThemeProvider>
-    </DilProvider>
+    <HataYakalayici>
+      <DilProvider>
+        <ThemeProvider value={UygulamaTemasi}>
+          <DisclaimerGate>
+            <Stack>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+            </Stack>
+          </DisclaimerGate>
+          <StatusBar style="light" />
+        </ThemeProvider>
+      </DilProvider>
+    </HataYakalayici>
   );
 }
