@@ -1,7 +1,35 @@
-﻿Flask
-Flask-Cors
-beautifulsoup4
-PyMuPDF
-cloudscraper
-requests
-gunicorn
+# 2026-08-18 (güvenlik denetimi madde 19): tüm sürümler sabitlendi.
+# Öncesinde hiçbir paketin sürümü belirtilmemişti -- `pip install` her
+# çalıştırıldığında farklı (ve potansiyel olarak uyumsuz ya da güvenlik
+# açığı içeren) sürümler kurulabiliyordu, reproducibility de yoktu.
+# Aşağıdaki sürümler, bu makinede o an ÇALIŞAN/test edilmiş sürümlerdir
+# (`pip freeze` ile alındı) -- davranış değişikliği YOK, sadece mevcut
+# çalışan hal "dondurulmuş" oldu. Düzenli olarak `pip list --outdated`
+# veya `pip-audit`/`safety check` ile güncel/güvenli tutulmalı.
+fastapi==0.141.1
+uvicorn[standard]==0.52.1
+pydantic==2.13.4
+apscheduler==3.11.3
+playwright==1.62.0
+pypdf==6.15.0
+beautifulsoup4==4.15.0
+requests==2.34.2
+# gunicorn: bu makinede (Windows) kurulu değil -- Unix'e özgü bir paket,
+# sadece Render (Linux) üretim sunucusunda gerekiyor. Sürüm, yerelde test
+# edilemediği için PyPI'daki güncel kararlı sürümle sabitlendi.
+gunicorn==26.0.0
+python-dotenv==1.2.2
+slowapi==0.1.10
+
+# 2026-08-17: kritik saf fonksiyonlar için birim testler eklendi (bkz.
+# tests/test_dosya_utils.py) -- bu oturumda birkaç kez elle test ederek
+# bulduğumuz gerçek bug'lar (ör. "603" yanlış eşleşmesi, "indice" yazım
+# farkı, REZULTATE/INVITATII ART.8.1 yanlış reddi), otomatik testlerle çok
+# daha erken yakalanabilirdi.
+pytest==9.1.1
+
+# PDF indirmelerinde gerçek bir tarayıcı TLS parmak izini taklit eder --
+# cetatenie.just.ro'nun bot-engelleme sistemini aşmaya yardımcı olur
+# (bkz. bot.py "2026-08-14 tespiti" notu). Kurulu değilse uygulama yine
+# çalışır, sadece bu korumadan yararlanamaz.
+curl_cffi==0.16.0

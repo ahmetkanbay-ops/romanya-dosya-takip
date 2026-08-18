@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "900266574620",
+    "project_id": "romanya-dosya-takip",
+    "storage_bucket": "romanya-dosya-takip.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:900266574620:android:6b937db273fd4e3bda30d9",
+        "android_client_info": {
+          "package_name": "com.knby.romanyadosyatakip"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCX6d_0ZAp0_015-7ol2FXvnHvQNwtmp0s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
