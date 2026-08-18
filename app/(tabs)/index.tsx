@@ -587,7 +587,7 @@ export default function IndexScreen() {
               <Text style={styles.uyariMetin}>{t.altUyari}</Text>
             </View>
           )}
-          <Text style={styles.footerImza}>🔒 Secured & Encrypted System · By @knby · © 2026</Text>
+          <Text style={styles.footerImza}>{t.footerImza}</Text>
         </ScrollView>
       </KeyboardAvoidingView>
       {konfetiGoster && <KonfettiYagmuru key={konfetiAnahtari} />}
