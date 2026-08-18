@@ -47,7 +47,9 @@ const CEVIRILER = {
     yerelBelgeButon: '📄 İndirilen PDF\'i Görüntüle',
     yerelBelgeAciklama: 'Bu, sistemimizin resmi siteden indirdiği ve numaranızın geçtiği PDF\'in birebir kopyasıdır.',
     altUyari: 'Bu sonuçlar bilgilendirme amaçlıdır. Nihai ve bağlayıcı bilgi için lütfen resmi belgeyi/kaynağı kontrol edin.',
-    footerImza: '🔒 Güvenli ve Şifreli Sistem · @knby tarafından · © 2026',
+    // Bilinçli olarak çevrilmiyor: marka/güvenlik imzası, dil ne olursa
+    // olsun İngilizce kalması isteniyor (kullanıcı talebi).
+    footerImza: '🔒 Secured & Encrypted System · By @knby · © 2026',
     sonucBulunamadi: 'Bu numarayla eşleşen bir kayıt bulunamadı.',
     // 2026-08-16: kullanıcı bir kategori FİLTRESİ seçip aramış ama numara o
     // kategoride değilse (başka bir kategoride varsa), "sistemde hiç yok"
@@ -354,7 +356,9 @@ For questions: ahmet.knby.25@gmail.com`,
     yerelBelgeButon: '📄 Vizualizați PDF-ul Descărcat',
     yerelBelgeAciklama: 'Aceasta este o copie exactă a PDF-ului descărcat de sistemul nostru de pe site-ul oficial, care conține numărul dumneavoastră de dosar.',
     altUyari: 'Aceste rezultate au caracter informativ. Pentru informații finale și obligatorii, vă rugăm consultați documentul/sursa oficială.',
-    footerImza: '🔒 Sistem Securizat și Criptat · De @knby · © 2026',
+    // Bilinçli olarak çevrilmiyor: marka/güvenlik imzası, dil ne olursa
+    // olsun İngilizce kalması isteniyor (kullanıcı talebi).
+    footerImza: '🔒 Secured & Encrypted System · By @knby · © 2026',
     sonucBulunamadi: 'Nu a fost găsită nicio înregistrare care să corespundă acestui număr.',
     sonucBaskaKategoride: 'Acest număr există în sistem, dar nu în categoria selectată. A fost găsit la: {kategori}',
     kategoriUyariBaslik: 'Categorie Greșită Selectată',
