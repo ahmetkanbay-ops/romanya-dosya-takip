@@ -2,7 +2,6 @@ import { DarkTheme, ThemeProvider, Theme } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import DisclaimerGate from '@/components/disclaimer-gate';
@@ -12,18 +11,31 @@ import { DilProvider } from '@/constants/i18n';
 // beyaz ekran"): `expo-splash-screen` paketi app.json'da plugin olarak
 // zaten kuruluydu, ama kod tarafında HİÇ yönetilmiyordu. Bu durumda native
 // splash ekranı (uygulama simgesi) OTOMATİK ve ERKEN kapanır -- React
-// Native JS motoru henüz İLK RENDER'ı bile tamamlamamışken. Native splash
-// ile gerçek içerik (RootLayout'un render ettiği koyu lacivert arayüz)
-// arasındaki bu boşlukta, hazırlanmamış/boş bir View (varsayılan beyaz
-// arka plan) kısa bir an görünüyordu.
+// Native JS motoru henüz İLK RENDER'ı bile tamamlamamışken.
 //
-// Çözüm: `preventAutoHideAsync()` ile native splash'in otomatik kapanması
-// ENGELLENİYOR, `RootLayout` mount olduğunda (JS render'ı GERÇEKTEN
-// tamamlandığında) `hideAsync()` ile MANUEL kapatılıyor. Böylece geçiş
-// splash'ten DOĞRUDAN hazır içeriğe oluyor, aradaki beyaz an ortadan
-// kalkıyor. Hata olursa (nadiren, ör. zaten gizliyse) sessizce yutuluyor
-// -- bu kozmetik bir iyileştirme, asla uygulamanın açılmasını engellememeli.
+// `preventAutoHideAsync()` ile native splash'in otomatik kapanması
+// ENGELLENİYOR. ÖNEMLİ (2026-08-18, devam eden düzeltme): `hideAsync()`
+// çağrısı BİLEREK burada DEĞİL -- `components/disclaimer-gate.tsx`'te,
+// gerçekten içerik (onay ekranı ya da ana uygulama) render edilmeye hazır
+// olduğu anda çağrılıyor. İlk denemede burada, RootLayout mount olur
+// olmaz çağrılıyordu -- ama bu, DisclaimerGate'in kendi AsyncStorage
+// kontrolü DAHA BAŞLAMADAN splash'i kapatıyordu, aradaki boşlukta ikon/
+// logo yerine boş bir renk görünüyordu (adb ile kare kare doğrulandı).
+// Splash'i kapatma sorumluluğunu gerçek hazır olma anına taşımak, o
+// boşlukta hep uygulamanın kendi ikonunu/logosunu göstermeyi sağlıyor.
 SplashScreen.preventAutoHideAsync().catch(() => {});
+
+// Güvenlik yedeği: DisclaimerGate'in kendi hideAsync() çağrısı HERHANGİ
+// bir sebeple (beklenmeyen bir hata, AsyncStorage'ın hiç yanıt vermemesi
+// gibi çok nadir bir durum) hiç tetiklenmezse, splash SONSUZA KADAR açık
+// kalıp uygulamayı kullanılamaz hale getirmesin diye 8 saniye sonra
+// zorla kapatılıyor. Normal koşullarda DisclaimerGate çok daha erken
+// (genelde birkaç yüz milisaniye içinde) kendi hideAsync()'ini çağırıp bu
+// zamanlayıcıyı gereksiz kılar -- ikinci bir hideAsync() çağrısı zaten
+// güvenli (no-op), hata vermez.
+setTimeout(() => {
+  SplashScreen.hideAsync().catch(() => {});
+}, 8000);
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -54,12 +66,6 @@ const UygulamaTemasi: Theme = {
 };
 
 export default function RootLayout() {
-  useEffect(() => {
-    // JS render'ı buraya kadar tamamlandı (component mount oldu) --
-    // native splash'i şimdi güvenle kapatabiliriz.
-    SplashScreen.hideAsync().catch(() => {});
-  }, []);
-
   return (
     <DilProvider>
       <ThemeProvider value={UygulamaTemasi}>

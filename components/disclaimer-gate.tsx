@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { BayrakRozeti, BayrakNoktalari } from '@/components/flag-mark';
@@ -37,6 +38,19 @@ export default function DisclaimerGate({ children }: { children: React.ReactNode
         setGosterilsin(true);
       } finally {
         setYukleniyor(false);
+        // 2026-08-18 (kullanıcı geri bildirimi -- "beyaz ekran yerine
+        // ilk açılıştaki ikon/logo görünse bari"): Önceden native splash
+        // (uygulamanın ikonu/logosu) `app/_layout.tsx`'te RootLayout mount
+        // olur olmaz -- yani bu AsyncStorage kontrolü DAHA BAŞLAMADAN --
+        // kapatılıyordu. Splash kapandıktan sonra, gerçek içerik hazır
+        // olana kadar geçen boşlukta (loading placeholder ne kadar iyi
+        // olursa olsun) ekranda İKON/LOGO değil, sade bir renk görünüyordu.
+        // Artık splash'i kapatma sorumluluğu BURAYA taşındı -- yani native
+        // splash, TAM OLARAK bu kontrol bitip gerçek ekran (ya onay ekranı
+        // ya da ana uygulama) render edilmeye hazır olana kadar EKRANDA
+        // KALIYOR. Böylece o ara boşlukta artık hep uygulamanın kendi
+        // ikonu/logosu görünüyor, boş bir renk değil.
+        SplashScreen.hideAsync().catch(() => {});
       }
     })();
   }, []);
