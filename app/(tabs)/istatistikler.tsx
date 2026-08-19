@@ -32,6 +32,20 @@ import { DonutGrafik, YillikCubukGrafik, SiraGostergesi } from '@/components/ist
 // Bu ekran deneysel-arama.tsx ile aynı prensiple index.tsx'ten bağımsız
 // yazıldı -- kendi state'i, kendi stilleri var, ana akışa dokunmuyor.
 
+// 2026-08-20 (sıra tahmini düzeltmesi): backend'deki yeni /api/sira-tahmini
+// ucu madde (alt kategori) ayrımı YAPARAK çalışıyor -- eski
+// /api/istatistikler/kisisel tüm maddeleri karıştırıyordu (ör. Articolul
+// 8'deki biri, Articolul 11'deki aynı numaranın onaylanmasıyla yanlışlıkla
+// "onaylanmış" sayılabiliyordu). Sadece "kuyruk" kapsamındaki maddeler
+// listeleniyor -- mülakat/davet listeleri (REZULTATE/INVITATII) bir
+// "bekleme kuyruğu" değil, ayrı bir süreç olduğu için kasıtlı olarak yok
+// (bkz. backend/dosya_utils.py _BEKLEME_KUYRUGU_ALT_KATEGORILERI ile
+// BİREBİR aynı liste, iki taraf da senkron tutulmalı).
+const MADDE_SECENEKLERI = [
+  'ARTICOLUL 11', 'ARTICOLUL 8', 'ARTICOLUL 8″1', 'ARTICOLUL 8″2',
+  'ARTICOLUL 10', 'NR. DOSAR',
+];
+
 const LACIVERT = '#1E2C4A';
 const KART_YUZEY = '#27375A';
 const ALTIN = '#E3A83B';
@@ -47,6 +61,7 @@ export default function IstatistiklerEkrani() {
   // --- Kişisel yıl istatistiği ---
   const [dosyaNo, setDosyaNo] = useState('');
   const [yil, setYil] = useState('');
+  const [maddeSecimi, setMaddeSecimi] = useState<string | null>(null);
   const [kisiselYukleniyor, setKisiselYukleniyor] = useState(false);
   const [kisiselHata, setKisiselHata] = useState('');
   const [kisiselSonuc, setKisiselSonuc] = useState<any | null>(null);
@@ -56,13 +71,17 @@ export default function IstatistiklerEkrani() {
       setKisiselHata(t.istatistikKisiselEksikAlan);
       return;
     }
+    if (!maddeSecimi) {
+      setKisiselHata(t.istatistikMaddeSeciniz);
+      return;
+    }
     setKisiselHata('');
     setKisiselYukleniyor(true);
     setKisiselSonuc(null);
     try {
-      const response = await apiIstek('/api/istatistikler/kisisel', {
+      const response = await apiIstek('/api/sira-tahmini', {
         method: 'POST',
-        body: JSON.stringify({ dosya_no: dosyaNo.trim(), yil: yil.trim() }),
+        body: JSON.stringify({ dosya_no: dosyaNo.trim(), yil: yil.trim(), alt_kategori: maddeSecimi }),
       });
       const data = await response.json();
       setKisiselSonuc(data);
@@ -127,6 +146,20 @@ export default function IstatistiklerEkrani() {
                 maxLength={4}
               />
             </View>
+
+            <Text style={styles.maddeEtiket}>{t.altKategoriEtiket}</Text>
+            <View style={styles.maddeSatir}>
+              {MADDE_SECENEKLERI.map((madde) => (
+                <TouchableOpacity
+                  key={madde}
+                  style={[styles.maddeChip, maddeSecimi === madde && styles.maddeChipAktif]}
+                  onPress={() => setMaddeSecimi(maddeSecimi === madde ? null : madde)}
+                >
+                  <Text style={[styles.maddeChipMetin, maddeSecimi === madde && styles.maddeChipMetinAktif]}>{madde}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             {kisiselHata ? <Text style={styles.hataMetin}>{kisiselHata}</Text> : null}
             <TouchableOpacity style={styles.gorüntuleButon} onPress={kisiselSorgula} disabled={kisiselYukleniyor}>
               {kisiselYukleniyor ? (
@@ -136,11 +169,7 @@ export default function IstatistiklerEkrani() {
               )}
             </TouchableOpacity>
 
-            {kisiselSonuc && kisiselSonuc.gecerli === false && (
-              <Text style={styles.hataMetin}>{t.istatistikKisiselEksikAlan}</Text>
-            )}
-
-            {kisiselSonuc && kisiselSonuc.gecerli && (
+            {kisiselSonuc && (
               <View style={styles.sonucIcerik}>
                 {kisiselSonuc.durum === 'bulunamadi' && (
                   <Text style={styles.durumMetni}>
@@ -152,43 +181,56 @@ export default function IstatistiklerEkrani() {
                     {t.istatistikKisiselOnaylanmis.replace('{yil}', kisiselSonuc.yil)}
                   </Text>
                 )}
-                {kisiselSonuc.durum === 'bekliyor' && (
-                  <>
-                    <Text style={styles.durumMetni}>
-                      {t.istatistikKisiselBekliyor
-                        .replace('{yil}', kisiselSonuc.yil)
-                        .replace('{sira}', String(kisiselSonuc.sira))
-                        .replace('{toplam}', String(kisiselSonuc.toplam_bekleyen))
-                        .replace('{kalan}', String(kisiselSonuc.sonrasinda_kalan))}
-                    </Text>
-                    <SiraGostergesi
-                      sira={kisiselSonuc.sira}
-                      toplam={kisiselSonuc.toplam_bekleyen}
-                      renk={ALTIN}
-                      // 2026-08-17 (kullanıcı geri bildirimi): KENAR
-                      // (#2E3B5C), kartın kendi arka plan rengine
-                      // (#27375A) neredeyse birebir yakın olduğu için
-                      // "sizden sonraki başvurular" çizgisi/noktası
-                      // ekranda görünmüyordu. GRI (#8E9AB8) -- uygulamada
-                      // zaten koyu zeminde okunaklı olduğu kanıtlanmış
-                      // renk -- kullanılarak kontrast artırıldı.
-                      renkArkaPlan={GRI}
-                    />
-                    <Text style={styles.tahminUyarisi}>⚠️ {t.istatistikSiraUyarisi}</Text>
-                  </>
-                )}
-
-                <View style={{ marginTop: 18, alignItems: 'center' }}>
-                  <DonutGrafik
-                    onaylanan={kisiselSonuc.toplam_ordine}
-                    bekleyen={kisiselSonuc.toplam_bekleyen}
-                    renkOnay={YESIL_INDIR}
-                    renkBekleyen={KENAR}
-                  />
-                  <Text style={styles.grafikAltYazi}>
-                    {kisiselSonuc.yil}: {t.istatistikToplamKabul} {kisiselSonuc.toplam_stadiu} · {t.istatistikToplamOnay} {kisiselSonuc.toplam_ordine}
-                  </Text>
-                </View>
+                {kisiselSonuc.durum === 'bekliyor' && (() => {
+                  const ky = kisiselSonuc.kendi_yilinda;
+                  const tz = kisiselSonuc.tum_zamanlar;
+                  const kalan = ky.yil_toplam_bekleyen - ky.sirasi;
+                  return (
+                    <>
+                      <Text style={styles.durumMetni}>
+                        {t.istatistikKisiselBekliyor
+                          .replace('{yil}', kisiselSonuc.yil)
+                          .replace('{sira}', String(ky.sirasi))
+                          .replace('{toplam}', String(ky.yil_toplam_bekleyen))
+                          .replace('{kalan}', String(kalan))}
+                      </Text>
+                      <SiraGostergesi
+                        sira={ky.sirasi}
+                        toplam={ky.yil_toplam_bekleyen}
+                        renk={ALTIN}
+                        // 2026-08-17 (kullanıcı geri bildirimi): KENAR
+                        // (#2E3B5C), kartın kendi arka plan rengine
+                        // (#27375A) neredeyse birebir yakın olduğu için
+                        // "sizden sonraki başvurular" çizgisi/noktası
+                        // ekranda görünmüyordu. GRI (#8E9AB8) -- uygulamada
+                        // zaten koyu zeminde okunaklı olduğu kanıtlanmış
+                        // renk -- kullanılarak kontrast artırıldı.
+                        renkArkaPlan={GRI}
+                      />
+                      {/* 2026-08-20: madde ayrımı eklenince artık "kendi
+                          yılınız" dışında, aynı maddede TÜM yılları
+                          kapsayan bir konum da anlamlı hale geldi -- ayrı
+                          bir satırla gösteriliyor. */}
+                      <Text style={styles.tumZamanlarMetni}>
+                        📅 {t.istatistikTumZamanlar
+                          .replace('{sira}', String(tz.sirasi))
+                          .replace('{toplam}', String(tz.toplam_bekleyen))}
+                      </Text>
+                      <Text style={styles.tahminUyarisi}>⚠️ {t.istatistikSiraUyarisi}</Text>
+                      <View style={{ marginTop: 18, alignItems: 'center' }}>
+                        <DonutGrafik
+                          onaylanan={ky.yil_onaylanan}
+                          bekleyen={ky.yil_toplam_bekleyen}
+                          renkOnay={YESIL_INDIR}
+                          renkBekleyen={KENAR}
+                        />
+                        <Text style={styles.grafikAltYazi}>
+                          {kisiselSonuc.yil}: {t.istatistikToplamKabul} {ky.yil_toplam_basvuru} · {t.istatistikToplamOnay} {ky.yil_onaylanan}
+                        </Text>
+                      </View>
+                    </>
+                  );
+                })()}
               </View>
             )}
           </View>
@@ -268,6 +310,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 11, color: BEYAZ, fontSize: 14,
   },
   hataMetin: { color: KIRMIZI, fontSize: 13, marginBottom: 10 },
+  maddeEtiket: { color: GRI, fontSize: 12, marginBottom: 6 },
+  maddeSatir: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  maddeChip: {
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1,
+    borderColor: KENAR, backgroundColor: LACIVERT,
+  },
+  maddeChipAktif: { backgroundColor: ALTIN, borderColor: ALTIN },
+  maddeChipMetin: { fontSize: 11.5, color: GRI },
+  maddeChipMetinAktif: { color: LACIVERT, fontWeight: 'bold' },
+  tumZamanlarMetni: { color: BEYAZ, fontSize: 12.5, textAlign: 'center', marginTop: 10, opacity: 0.85 },
   gorüntuleButon: { backgroundColor: ALTIN, borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
   gorüntuleButonMetin: { color: LACIVERT, fontWeight: '800', fontSize: 14.5 },
   sonucIcerik: { marginTop: 18 },

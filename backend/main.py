@@ -925,25 +925,54 @@ def sira_tahmini(veri: SiraTahminiIstegi, request: Request, _anahtar=Depends(app
     görüldü). Mobil tarafta bu netlik korunarak sunulmalı.
     """
     dosya_no_norm = sayisal_cekirdek(veri.dosya_no)
+    yil = veri.yil.strip()
+    alt_kategori = veri.alt_kategori.strip()
     if not dosya_no_norm:
         raise HTTPException(status_code=400, detail="Geçersiz dosya numarası.")
 
     conn = veritabani_baglantisi(DB_FILE, row_factory=sqlite3.Row)
-    sonuc = sira_tahmini_hesapla(conn, dosya_no_norm, veri.yil.strip(), veri.alt_kategori.strip())
+    cursor = conn.cursor()
+
+    # 2026-08-20 DÜZELTMESİ (kullanıcı isteği: eski istatistikler/kisisel
+    # ucuyla aynı 3 net durumu (onaylanmış/bekliyor/bulunamadı) versin,
+    # ama madde ayrımı YAPARAK -- eski uç tüm maddeleri karıştırıyordu,
+    # bu da yanlış "onaylandı" eşleşmesi riski taşıyordu). Önce ordine'de
+    # AYNI numara+yıl (herhangi ordine alt kategorisinde -- bugün canlı
+    # doğrulanan güvenli eşleştirme ilkesiyle tutarlı) var mı bakılıyor.
+    cursor.execute(
+        "SELECT COUNT(*) FROM dosyalar WHERE ana_kategori='ordine' AND dosya_no_norm=? AND yil=?",
+        (dosya_no_norm, yil),
+    )
+    onaylanmis_mi = cursor.fetchone()[0] > 0
+
+    if onaylanmis_mi:
+        conn.close()
+        return {
+            "bulundu": True,
+            "durum": "onaylanmis",
+            "dosya_no": veri.dosya_no,
+            "yil": yil,
+            "alt_kategori": alt_kategori,
+        }
+
+    sonuc = sira_tahmini_hesapla(conn, dosya_no_norm, yil, alt_kategori)
     conn.close()
 
     if sonuc is None:
         return {
             "bulundu": False,
-            "mesaj": "Bu dosya için sıra tahmini yapılamıyor -- ya zaten sonuçlanmış, "
-                     "ya hiç kayıtlı değil ya da bu madde sıra takibi kapsamında değil.",
+            "durum": "bulunamadi",
+            "dosya_no": veri.dosya_no,
+            "yil": yil,
+            "alt_kategori": alt_kategori,
         }
 
     return {
         "bulundu": True,
+        "durum": "bekliyor",
         "dosya_no": veri.dosya_no,
-        "yil": veri.yil,
-        "alt_kategori": veri.alt_kategori,
+        "yil": yil,
+        "alt_kategori": alt_kategori,
         **sonuc,
         "uyari": "Bu, başvuru sırasına (dosya numarasına) göre tahmini bir konumdur -- "
                  "resmi işlem sırasının garantisi değildir.",
@@ -1129,7 +1158,6 @@ def favorilerim(
 # (kullanıcının "dosya eklendikçe güncellenmeli" isteği böyle karşılanıyor).
 _ISTATISTIK_ONBELLEK_SURESI_SN = 1800
 _genel_istatistik_onbellek = {"veri": None, "zaman": 0.0}
-_yillik_istatistik_onbellek = {}  # yil -> {"zaman":..., "stadiu_set":..., "ordine_set":..., "bekleyenler":...}
 
 
 def _genel_istatistikleri_hesapla():
@@ -1199,73 +1227,13 @@ def istatistikler_genel(request: Request, _anahtar=Depends(app_anahtarini_dogrul
     return onbellek["veri"]
 
 
-class IstatistikIstegi(BaseModel):
-    dosya_no: str = Field(max_length=100)
-    yil: str = Field(max_length=10)
-
-
-@app.post("/api/istatistikler/kisisel")
-@limiter.limit("20/minute")
-def istatistikler_kisisel(veri: IstatistikIstegi, request: Request, _anahtar=Depends(app_anahtarini_dogrula)):
-    birincil = sayisal_cekirdek(veri.dosya_no)
-    yil = (veri.yil or "").strip()
-    if not birincil or not yil:
-        return {"gecerli": False}
-
-    simdi = time.time()
-    onbellek = _yillik_istatistik_onbellek.get(yil)
-    if onbellek is None or (simdi - onbellek["zaman"]) > _ISTATISTIK_ONBELLEK_SURESI_SN:
-        conn = veritabani_baglantisi(DB_FILE)
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT DISTINCT dosya_no_norm FROM dosyalar WHERE ana_kategori='stadiu' AND yil = ?", (yil,)
-        )
-        stadiu_set = {row[0] for row in cursor.fetchall()}
-        cursor.execute(
-            "SELECT DISTINCT dosya_no_norm FROM dosyalar WHERE ana_kategori='ordine' AND yil = ?", (yil,)
-        )
-        ordine_set = {row[0] for row in cursor.fetchall()}
-        conn.close()
-        try:
-            bekleyenler = sorted(stadiu_set - ordine_set, key=lambda x: int(x))
-        except ValueError:
-            bekleyenler = sorted(stadiu_set - ordine_set)
-        onbellek = {"zaman": simdi, "stadiu_set": stadiu_set, "ordine_set": ordine_set, "bekleyenler": bekleyenler}
-        _yillik_istatistik_onbellek[yil] = onbellek
-
-    stadiu_set = onbellek["stadiu_set"]
-    ordine_set = onbellek["ordine_set"]
-    bekleyenler = onbellek["bekleyenler"]
-
-    if birincil in ordine_set:
-        return {
-            "gecerli": True,
-            "durum": "onaylanmis",
-            "yil": yil,
-            "toplam_stadiu": len(stadiu_set),
-            "toplam_ordine": len(ordine_set),
-            "toplam_bekleyen": len(bekleyenler),
-        }
-    if birincil in stadiu_set:
-        sira = bekleyenler.index(birincil) + 1
-        return {
-            "gecerli": True,
-            "durum": "bekliyor",
-            "yil": yil,
-            "toplam_stadiu": len(stadiu_set),
-            "toplam_ordine": len(ordine_set),
-            "toplam_bekleyen": len(bekleyenler),
-            "sira": sira,
-            "sonrasinda_kalan": len(bekleyenler) - sira,
-        }
-    return {
-        "gecerli": True,
-        "durum": "bulunamadi",
-        "yil": yil,
-        "toplam_stadiu": len(stadiu_set),
-        "toplam_ordine": len(ordine_set),
-        "toplam_bekleyen": len(bekleyenler),
-    }
+# 2026-08-20 KALDIRILDI: eski /api/istatistikler/kisisel ucu buradaydı --
+# madde (alt kategori) ayrımı YAPMIYORDU (tüm stadiu/ordine kategorilerini
+# aynı yıl içinde karıştırıyordu), bu da yanlış "onaylanmış" eşleşmesi
+# riski taşıyordu (ör. Articolul 8'deki biri, Articolul 11'deki aynı
+# numaranın onaylanmasıyla yanlışlıkla eşleşebilirdi). Yerini madde-farkında
+# /api/sira-tahmini ucu aldı (yukarıda) -- istatistikler.tsx artık ona
+# bağlı. _yillik_istatistik_onbellek de bununla birlikte kaldırıldı.
 
 
 # 2026-08-19 (Render'a taşıma sırasında bulundu): Render, HTTPS'i kendi
