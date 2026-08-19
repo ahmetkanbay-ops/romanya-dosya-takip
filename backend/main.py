@@ -1139,6 +1139,18 @@ def istatistikler_kisisel(veri: IstatistikIstegi, request: Request, _anahtar=Dep
     }
 
 
+# 2026-08-19 (Render'a taşıma sırasında bulundu): Render, HTTPS'i kendi
+# ucunda sonlandırıp bize sunucuya düz HTTP olarak iletiyor (yaygın bir
+# reverse-proxy deseni) -- bu yüzden `request.base_url` (bkz.
+# _yerel_pdf_url_olustur) "http://" üretiyordu, "https://" değil, halbuki
+# kullanıcı tarayıcısı/uygulaması gerçekte HTTPS ile bağlanıyor. Render (ve
+# benzeri proxy'ler) gerçek şemayı X-Forwarded-Proto başlığında gönderir --
+# ProxyHeadersMiddleware bu başlığı okuyup request.base_url'i düzeltiyor.
+# Yerel geliştirmede (proxy yok, Host doğrudan) etkisi yok, zararsız.
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+app = ProxyHeadersMiddleware(app, trusted_hosts="*")
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
