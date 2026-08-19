@@ -18,12 +18,14 @@ try:
 except Exception:
     pass
 
+import re
 import secrets
 import sqlite3
 import time
 import requests
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from types import SimpleNamespace
 from urllib.parse import quote
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
@@ -1206,12 +1208,49 @@ def _genel_istatistikleri_hesapla():
         for y in tum_yillar
     ]
 
+    # 2026-08-20 (rakip analizinden ilham): "son 7 gün aktivitesi" artık
+    # sadece admin panelinde değil, kullanıcıya da açık -- "sistem gerçekten
+    # çalışıyor" güvenini artırmak için (bkz. rakip uygulamanın "Son 7 gün: 4
+    # PDF, 239 kişi" kutusu). sistem_olaylari.tarama_tamamlandi olaylarının
+    # serbest metin 'detay' alanından (ör. "22 PDF bulundu, 5 kayıt işlendi
+    # (3 yeni), ...") regex ile sayılar çıkarılıyor -- ayrı bir sütun
+    # eklemek yerine zaten var olan veriyi kullanmak için.
+    son_7_gun_pdf = 0
+    son_7_gun_yeni_kayit = 0
+    son_7_gun_tarama_sayisi = 0
+    try:
+        conn2 = veritabani_baglantisi(DB_FILE)
+        c2 = conn2.cursor()
+        esik = (datetime.now(ROMANYA_SAAT_DILIMI) - timedelta(days=7)).astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%d %H:%M:%S")
+        c2.execute(
+            "SELECT detay FROM sistem_olaylari WHERE olay_tipi='tarama_tamamlandi' AND zaman >= ?",
+            (esik,),
+        )
+        for (detay,) in c2.fetchall():
+            if not detay:
+                continue
+            son_7_gun_tarama_sayisi += 1
+            pdf_eslesme = re.search(r"(\d+)\s*PDF bulundu", detay)
+            if pdf_eslesme:
+                son_7_gun_pdf += int(pdf_eslesme.group(1))
+            yeni_eslesme = re.search(r"\((\d+)\s*yeni\)", detay)
+            if yeni_eslesme:
+                son_7_gun_yeni_kayit += int(yeni_eslesme.group(1))
+        conn2.close()
+    except Exception as e:
+        print(f"✗ Son 7 gün aktivite hesabı hatası: {str(e)[:80]}")
+
     return {
         "toplam_stadiu": toplam_stadiu,
         "toplam_ordine": toplam_ordine,
         "toplam_onaylanan": toplam_onaylanan,
         "toplam_bekleyen": toplam_stadiu - toplam_onaylanan,
         "yillik_dagilim": yillik_dagilim,
+        "son_7_gun": {
+            "pdf": son_7_gun_pdf,
+            "yeni_kayit": son_7_gun_yeni_kayit,
+            "tarama_sayisi": son_7_gun_tarama_sayisi,
+        },
         "hesaplanma_zamani": datetime.now().isoformat(),
     }
 

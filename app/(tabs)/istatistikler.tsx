@@ -217,6 +217,33 @@ export default function IstatistiklerEkrani() {
                           .replace('{toplam}', String(tz.toplam_bekleyen))}
                       </Text>
                       <Text style={styles.tahminUyarisi}>⚠️ {t.istatistikSiraUyarisi}</Text>
+
+                      {/* 2026-08-20 (rakip analizinden ilham: "sıra bize ne
+                          kadar yaklaştı"): dosyanıza en yakın, ÖNCEDEN
+                          onaylanmış numaraları gösterir -- tarih bilgimiz
+                          olmadığı için sadece numara farkı, "X gün önce"
+                          gibi bir iddia YOK (bkz. dosya_utils.py notu). */}
+                      {ky.en_yakin_komsular ? (
+                        <View style={styles.yakinKomsuKutu}>
+                          <Text style={styles.yakinKomsuBaslik}>{t.istatistikYakinKomsuBaslik}</Text>
+                          <Text style={styles.yakinKomsuAciklama}>{t.istatistikYakinKomsuAciklama}</Text>
+                          <Text style={styles.yakinKomsuSatir}>
+                            {ky.en_yakin_komsular.alt
+                              ? '↓ ' + t.istatistikYakinKomsuAlt
+                                  .replace('{no}', ky.en_yakin_komsular.alt.dosya_no_norm)
+                                  .replace('{fark}', String(ky.en_yakin_komsular.alt.fark))
+                              : '↓ ' + t.istatistikYakinKomsuYok}
+                          </Text>
+                          <Text style={styles.yakinKomsuSatir}>
+                            {ky.en_yakin_komsular.ust
+                              ? '↑ ' + t.istatistikYakinKomsuUst
+                                  .replace('{no}', ky.en_yakin_komsular.ust.dosya_no_norm)
+                                  .replace('{fark}', String(ky.en_yakin_komsular.ust.fark))
+                              : '↑ ' + t.istatistikYakinKomsuYok}
+                          </Text>
+                        </View>
+                      ) : null}
+
                       <View style={{ marginTop: 18, alignItems: 'center' }}>
                         <DonutGrafik
                           onaylanan={ky.yil_onaylanan}
@@ -270,6 +297,20 @@ export default function IstatistiklerEkrani() {
                   </View>
                 </View>
 
+                {/* 2026-08-20 (rakip analizinden ilham): "sistem gerçekten
+                    çalışıyor" güvenini artırmak için son 7 günün özeti
+                    artık burada da, admin panelinin dışında da görünüyor. */}
+                {genelSonuc.son_7_gun ? (
+                  <View style={styles.son7GunKutu}>
+                    <Text style={styles.son7GunBaslik}>📡 {t.istatistikSon7GunBaslik}</Text>
+                    <Text style={styles.son7GunMetin}>
+                      {t.istatistikSon7GunMetin
+                        .replace('{pdf}', String(genelSonuc.son_7_gun.pdf))
+                        .replace('{yeni}', String(genelSonuc.son_7_gun.yeni_kayit))}
+                    </Text>
+                  </View>
+                ) : null}
+
                 <Text style={styles.bolumAltBaslik}>{t.istatistikYillikGrafikBaslik}</Text>
                 <YillikCubukGrafik veri={genelSonuc.yillik_dagilim} renkStadiu={ALTIN} renkOrdine={YESIL_INDIR} />
                 <View style={styles.grafikLejant}>
@@ -320,6 +361,19 @@ const styles = StyleSheet.create({
   maddeChipMetin: { fontSize: 11.5, color: GRI },
   maddeChipMetinAktif: { color: LACIVERT, fontWeight: 'bold' },
   tumZamanlarMetni: { color: BEYAZ, fontSize: 12.5, textAlign: 'center', marginTop: 10, opacity: 0.85 },
+  yakinKomsuKutu: {
+    backgroundColor: LACIVERT, borderRadius: 12, borderWidth: 1, borderColor: KENAR,
+    padding: 12, marginTop: 14,
+  },
+  yakinKomsuBaslik: { color: BEYAZ, fontSize: 13, fontWeight: '800', marginBottom: 4 },
+  yakinKomsuAciklama: { color: GRI, fontSize: 10.5, lineHeight: 15, marginBottom: 8 },
+  yakinKomsuSatir: { color: BEYAZ, fontSize: 12.5, marginTop: 4 },
+  son7GunKutu: {
+    backgroundColor: LACIVERT, borderRadius: 12, borderWidth: 1, borderColor: KENAR,
+    padding: 14, marginTop: 18, alignItems: 'center',
+  },
+  son7GunBaslik: { color: ALTIN, fontSize: 13, fontWeight: '800', marginBottom: 4 },
+  son7GunMetin: { color: BEYAZ, fontSize: 12.5, textAlign: 'center' },
   gorüntuleButon: { backgroundColor: ALTIN, borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
   gorüntuleButonMetin: { color: LACIVERT, fontWeight: '800', fontSize: 14.5 },
   sonucIcerik: { marginTop: 18 },

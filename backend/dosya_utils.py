@@ -779,6 +779,31 @@ def sira_tahmini_hesapla(conn, dosya_no_norm, yil, alt_kategori):
     yil_onaylanan = max(yil_toplam_basvuru - toplam_yil, 0)
     onay_yuzdesi = (yil_onaylanan / yil_toplam_basvuru * 100) if yil_toplam_basvuru else 0.0
 
+    # -- En yakın onaylanmış komşu numaralar (2026-08-20, rakip uygulama
+    # ilhamı: "sıra bize ne kadar yaklaştı") --
+    # ÖNEMLİ (dürüstlük): elimizde her onayın GERÇEK yayın tarihi yok
+    # (dosyalar tablosunda böyle bir sütun yok), bu yüzden "X gün önce"
+    # GİBİ bir iddia YOK -- sadece "en yakın numaralar hangileri, ne kadar
+    # numara farkı var" gösteriliyor. Aynı yıl içinde, herhangi bir ordine
+    # alt kategorisinde arıyor (bugün kurulan güvenli eşleştirme ilkesiyle
+    # tutarlı).
+    cursor.execute(
+        "SELECT dosya_no_norm FROM dosyalar WHERE ana_kategori='ordine' AND yil=? "
+        "AND CAST(dosya_no_norm AS INTEGER) < ? ORDER BY CAST(dosya_no_norm AS INTEGER) DESC LIMIT 1",
+        (yil, numara_int),
+    )
+    _alt = cursor.fetchone()
+    cursor.execute(
+        "SELECT dosya_no_norm FROM dosyalar WHERE ana_kategori='ordine' AND yil=? "
+        "AND CAST(dosya_no_norm AS INTEGER) > ? ORDER BY CAST(dosya_no_norm AS INTEGER) ASC LIMIT 1",
+        (yil, numara_int),
+    )
+    _ust = cursor.fetchone()
+    en_yakin_komsular = {
+        "alt": {"dosya_no_norm": _alt[0], "fark": numara_int - int(_alt[0])} if _alt else None,
+        "ust": {"dosya_no_norm": _ust[0], "fark": int(_ust[0]) - numara_int} if _ust else None,
+    }
+
     return {
         "kendi_yilinda": {
             "onundeki_sayisi": onundeki_yil,
@@ -787,6 +812,7 @@ def sira_tahmini_hesapla(conn, dosya_no_norm, yil, alt_kategori):
             "yil_toplam_basvuru": yil_toplam_basvuru,
             "yil_onaylanan": yil_onaylanan,
             "onay_yuzdesi": round(onay_yuzdesi, 1),
+            "en_yakin_komsular": en_yakin_komsular,
         },
         "tum_zamanlar": {
             "onundeki_sayisi": onundeki_tum,
