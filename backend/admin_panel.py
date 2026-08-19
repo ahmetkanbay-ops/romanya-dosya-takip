@@ -16,6 +16,7 @@ güncellemesi gerektireceği için) İSTEMEDİĞİNE karar verdi (2026-08-19).
 """
 import html
 import os
+import shutil
 import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -75,10 +76,25 @@ def _disk_kullanimini_hesapla(db_dosyasi):
     db_boyutu = os.path.getsize(db_dosyasi) if os.path.exists(db_dosyasi) else 0
     pdf_boyutu = _klasor_boyutu(PDF_KOK_KLASOR) if os.path.isdir(PDF_KOK_KLASOR) else 0
 
+    # 2026-08-19 (disk kotası izleme): db_boyutu + pdf_boyutu sadece BİZİM
+    # dosyalarımızın boyutu -- diskteki GERÇEK doluluk oranını (Render'daki
+    # kalıcı diskin toplam kapasitesine göre) göstermiyordu. shutil.disk_usage
+    # VERI_DIZINI'nin bağlı olduğu dosya sisteminin gerçek toplam/kullanılan/
+    # boş alanını veriyor -- Render'da bu, /data'ya bağlı kalıcı disk (10GB).
+    try:
+        disk_toplam, disk_kullanilan, disk_bos = shutil.disk_usage(VERI_DIZINI)
+        disk_yuzde = (disk_kullanilan / disk_toplam * 100) if disk_toplam else 0.0
+    except OSError:
+        disk_toplam = disk_kullanilan = disk_bos = 0
+        disk_yuzde = 0.0
+
     sonuc = {
         "db_boyutu": _boyutu_okunabilir_yap(db_boyutu),
         "pdf_boyutu": _boyutu_okunabilir_yap(pdf_boyutu),
         "toplam_boyutu": _boyutu_okunabilir_yap(db_boyutu + pdf_boyutu),
+        "disk_toplam": _boyutu_okunabilir_yap(disk_toplam),
+        "disk_bos": _boyutu_okunabilir_yap(disk_bos),
+        "disk_yuzde": disk_yuzde,
     }
     onbellek["veri"] = sonuc
     onbellek["zaman"] = time.time()
@@ -357,6 +373,13 @@ def admin_sayfa_html(m):
       <div class="kart"><div class="rakam">{s['kritik_uyari_7gun']}</div><div class="etiket">Kritik uyarı (7 gün)</div></div>
       <div class="kart"><div class="rakam" style="font-size:17px">{s['disk']['db_boyutu']}</div><div class="etiket">Veritabanı boyutu</div></div>
       <div class="kart"><div class="rakam" style="font-size:17px">{s['disk']['pdf_boyutu']}</div><div class="etiket">PDF klasörü boyutu</div></div>
+    </div>
+
+    <div class="genis-kart">
+      <h3>Disk kullanımı (kalıcı disk)</h3>
+      <p style="margin:0 0 2px;font-size:13.5px">%{s['disk']['disk_yuzde']:.1f} dolu
+        <span style="color:var(--metin-ikincil)">({s['disk']['disk_bos']} boş / {s['disk']['disk_toplam']} toplam)</span></p>
+      <div class="donusum-cubuk-zemin"><div class="donusum-cubuk-dolu" style="width:{min(s['disk']['disk_yuzde'],100):.1f}%{';background:#d9534f' if s['disk']['disk_yuzde'] >= 80 else ''}"></div></div>
     </div>
 
     <div class="genis-kart">

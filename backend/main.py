@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 
 # 2026-08-17 (canlı hata düzeltmesi): Windows'ta konsol/çıktı kod sayfası
@@ -391,6 +392,36 @@ def veritabani_yedekle():
             pass  # admin uyarısı bile başarısız olursa yedekleme sürecini bozmasın
 
 
+# ---------------------------------------------------------------------------
+# DİSK KOTASI İZLEME (2026-08-19, Render taşıması sonrası ele alındı)
+# ---------------------------------------------------------------------------
+# Render'daki kalıcı disk sabit boyutlu (10GB) -- veri (DB + PDF'ler) sürekli
+# büyüdüğü için bir gün doldurabilir, dolarsa yeni PDF indirilemez/DB
+# yazmaları başarısız olur. Önceden hiçbir eşik-uyarı mekanizması yoktu.
+# Her gün 06:00'da (yedekleme 03:00, tarama 09:00 -- ikisinin arasında,
+# çakışma yok) gerçek dosya sistemi doluluk oranı kontrol ediliyor.
+DISK_UYARI_ESIK_YUZDE = 80  # bu oranın üstünde günlük kritik uyarı gönderilir
+
+
+def disk_kotasi_kontrol_et():
+    try:
+        toplam, kullanilan, bos = shutil.disk_usage(VERI_DIZINI)
+        if not toplam:
+            return
+        yuzde = kullanilan / toplam * 100
+        bos_gb = bos / (1024 ** 3)
+        if yuzde >= DISK_UYARI_ESIK_YUZDE:
+            from bildirim import admin_kritik_uyari  # lazy import, bkz. veritabani_yedekle() notu
+            admin_kritik_uyari(
+                f"Disk kullanımı %{yuzde:.1f} -- sadece {bos_gb:.2f} GB boş alan kaldı. "
+                f"Render panelinden diski büyütmeyi düşün (Disks -> Resize)."
+            )
+        else:
+            print(f"✓ Disk kotası kontrolü: %{yuzde:.1f} dolu, {bos_gb:.2f} GB boş (eşik: %{DISK_UYARI_ESIK_YUZDE}).")
+    except Exception as e:
+        print(f"✗ Disk kotası kontrolü hatası: {e}")
+
+
 # 2026-08-18: eski @app.on_event("startup"/"shutdown") -- FastAPI'de
 # deprecated, ileride tamamen kaldırılacak (bkz. DeprecationWarning).
 # Yerine önerilen "lifespan" context manager kullanılıyor. ÖNEMLİ: bu
@@ -427,6 +458,16 @@ async def lifespan(_app: FastAPI):
         minute='0',
         id='db_yedekleme',
         name='Veritabanı Yedekleme'
+    )
+    # 2026-08-19: disk kotası izleme -- yedekleme (03:00) ile tarama (09:00)
+    # arasında, gün içinde tek sefer kontrol ediyor.
+    scheduler.add_job(
+        disk_kotasi_kontrol_et,
+        'cron',
+        hour='6',
+        minute='0',
+        id='disk_kota_kontrolu',
+        name='Disk Kotası Kontrolü'
     )
     scheduler.start()
     print(f"\n✓ Scheduler başlatıldı!")
