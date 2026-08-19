@@ -138,6 +138,28 @@ def admin_girisini_dogrula(kimlik: HTTPBasicCredentials = Depends(_admin_guvenli
     return True
 
 
+# 2026-08-19 (hata izleme): SENTRY_DSN ortam değişkeni ayarlı değilse
+# (ör. yerel geliştirmede) sentry_sdk.init() hiç çağrılmıyor -- SDK
+# devre dışı kalır, hiçbir hata/gecikme eklemez. Ayrıca sentry-sdk paketi
+# henüz kurulmamışsa (requirements.txt güncellenmiş ama pip install
+# çalıştırılmamışsa) da uygulama yine ayağa kalkar, sadece izleme kapalı
+# kalır -- diğer opsiyonel bağımlılıklarla (slowapi) aynı desen.
+SENTRY_DSN = os.environ.get("SENTRY_DSN")
+if SENTRY_DSN:
+    try:
+        import sentry_sdk
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            # Kişisel veri (dosya numarası, cihaz kimliği) Sentry'ye
+            # SIZMASIN diye istek gövdesi/PII gönderimi kapalı tutuluyor --
+            # sadece hatanın kendisi (stack trace, istek yolu) gönderiliyor.
+            send_default_pii=False,
+            traces_sample_rate=0.1,
+        )
+        print("✓ Sentry hata izleme aktif.")
+    except ImportError:
+        print("⚠️  SENTRY_DSN ayarlı ama sentry-sdk paketi kurulu değil -- izleme devre dışı.")
+
 app = FastAPI()
 
 if _SLOWAPI_VAR:

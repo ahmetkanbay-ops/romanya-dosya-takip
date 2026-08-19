@@ -33,3 +33,8 @@ pytest==9.1.1
 # (bkz. bot.py "2026-08-14 tespiti" notu). Kurulu değilse uygulama yine
 # çalışır, sadece bu korumadan yararlanamaz.
 curl_cffi==0.16.0
+
+# 2026-08-19: Hata izleme (Sentry). SENTRY_DSN ortam değişkeni ayarlı
+# değilse main.py sentry_sdk.init()'i hiç çağırmıyor -- yani bu paket
+# kuruluysa da DSN yoksa devre dışı kalır, hiçbir yan etkisi olmaz.
+sentry-sdk[fastapi]==2.68.0
