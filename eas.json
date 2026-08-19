@@ -15,12 +15,20 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_TABAN": "https://romanya-dosya-takip.onrender.com",
+        "EXPO_PUBLIC_APP_KEY": "48d00fb5e9eb31d0aef4b76491f7c616953bf86526f4dfbf"
       }
     },
     "production": {
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_TABAN": "https://romanya-dosya-takip.onrender.com",
+        "EXPO_PUBLIC_APP_KEY": "48d00fb5e9eb31d0aef4b76491f7c616953bf86526f4dfbf"
       }
     }
   },

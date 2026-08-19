@@ -36,7 +36,15 @@ function otomatikApiTabanTespitEt(): string {
   return `http://${YEDEK_YEREL_IP}:10000`;
 }
 
-export const API_TABAN = otomatikApiTabanTespitEt();
+// 2026-08-19 (Render'a taşıma): "preview"/"production" build profilleri
+// (bkz. eas.json "env" alanları), EXPO_PUBLIC_API_TABAN'ı Render'ın gerçek
+// adresine sabitliyor -- bu build'lerde artık yerel IP tahmini/otomatik
+// tespit HİÇ devreye girmiyor. Bu değişken ayarlanmadığında (yerel `npm
+// start`/Metro geliştirme, ya da "development" build profili) davranış
+// TAMAMEN ESKİSİ GİBİ kalır -- otomatik yerel IP tespiti/yedek IP.
+const SABIT_API_TABAN = process.env.EXPO_PUBLIC_API_TABAN;
+
+export const API_TABAN = SABIT_API_TABAN || otomatikApiTabanTespitEt();
 
 // EXPO_PUBLIC_ önekli değişkenler Expo tarafından build zamanında otomatik
 // gömülür -- ayrı bir paket gerekmez. Proje kökünde (backend/ DEĞİL, mobil
