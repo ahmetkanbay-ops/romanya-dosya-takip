@@ -313,6 +313,127 @@ def _teshis_kaydet(page, tip, alt_kategori, url):
         print(f"  ✗ Teşhis kaydı alınamadı ({alt_kategori}): {str(e)[:80]}")
 
 
+# =============================================================================
+# "B PLANI" -- TASARIMDAN BAĞIMSIZ PDF KEŞFİ (2026-08-19, kullanıcı önerisi)
+# =============================================================================
+# Kök gerekçe: aynı gün canlı testte doğrulandı ki cetatenie.just.ro,
+# ORDINE tarafını (tıklama/sekme yapısından ayrı sayfalara) tamamen yeniden
+# yapılandırmış -- yani site tasarımı gelecekte YİNE değişebilir, bu her
+# zaman bir risk. A Planı (yukarıdaki _kategori_elementini_bul + tıklama)
+# sayfa YAPISINA bağımlı; bu iki fonksiyon ise WordPress'in kendi yerleşik,
+# SEO amaçlı, görsel tasarımdan TAMAMEN bağımsız REST API'sini kullanıyor
+# (/wp-json/wp/v2/media) -- buton/sekme/class adı ne olursa olsun çalışır.
+#
+# ÖNEMLİ TASARIM KARARI: B Planı SÜREKLİ paralel çalışmıyor (kullanıcının
+# net isteği -- siteye gereksiz ek yük bindirmemek için). SADECE A Planı bir
+# kategoriyi TAMAMEN bulamadığında (aşağıda "eleman is None" dalında) TEK
+# SEFERLİK devreye giriyor. A Planı'nın kendi (yukarıdaki, iyice test
+# edilmiş) indirme döngüsüne KASITLI OLARAK dokunulmadı -- bu iki fonksiyon
+# tamamen izole, kendi indirme mantığını taşıyor. Amaç: B Planı'ndaki
+# olası bir hata, A Planı'nın çalışan akışını hiçbir şekilde etkileyemesin.
+def _wp_json_ile_pdf_kesfet(taban_url="https://cetatenie.just.ro", sayfa_sayisi_limit=20, sayfa_basi=50):
+    """
+    WordPress'in yerleşik REST API'si üzerinden site genelinde yüklenmiş
+    TÜM PDF medyalarını (en yeniden eskiye) keşfeder. Sayfa tasarımıyla
+    hiçbir ilgisi yok -- site menüsünü/sekmelerini değiştirse bile bu uç
+    nokta (WordPress çekirdek özelliği) genelde aynı kalır.
+    """
+    kesfedilen = []
+    for sayfa in range(1, sayfa_sayisi_limit + 1):
+        istek_url = (
+            f"{taban_url}/wp-json/wp/v2/media"
+            f"?mime_type=application/pdf&per_page={sayfa_basi}"
+            f"&orderby=date&order=desc&page={sayfa}"
+        )
+        try:
+            yanit = requests.get(istek_url, timeout=20, headers=TARAYICI_BASLIKLARI)
+            if yanit.status_code != 200:
+                break
+            veri = yanit.json()
+            if not veri:
+                break
+            for madde in veri:
+                kaynak = madde.get("source_url")
+                if kaynak and kaynak.lower().endswith(".pdf"):
+                    kesfedilen.append(kaynak)
+        except Exception as e:
+            print(f"  ✗ B Planı (wp-json) keşif hatası (sayfa {sayfa}): {str(e)[:80]}")
+            break
+    return kesfedilen
+
+
+def _b_plani_devreye_al(tip, alt_kategori, http_oturum, kontrol_conn):
+    """
+    A Planı bir kategoriyi HİÇ bulamadığında çağrılır. wp-json üzerinden
+    keşfedilen TÜM PDF'ler arasından, dosya adı bu alt_kategoriyle uyuşanları
+    seçip A Planı ile AYNI güvenlik kurallarına (kategori-dosya adı eşleşmesi,
+    zaten-işlendi kontrolü) tabi tutarak indirir/veritabanına işler.
+    Döner: (indirilen_sayısı, kaydedilen_kayıt, yeni_kayıtlar_listesi)
+    """
+    print(f"  🔁 B Planı devreye giriyor: '{alt_kategori}' için wp-json üzerinden keşif deneniyor...")
+    try:
+        tum_pdfler = _wp_json_ile_pdf_kesfet()
+    except Exception as e:
+        print(f"  ✗ B Planı tamamen başarısız oldu: {str(e)[:80]}")
+        return 0, 0, []
+
+    if not tum_pdfler:
+        print("  ✗ B Planı: wp-json'dan hiç PDF keşfedilemedi (site bu API'yi desteklemiyor olabilir).")
+        return 0, 0, []
+
+    klasor_yolu = os.path.join(PDF_KOK_KLASOR, tip, klasor_adi_guvenli(alt_kategori))
+    os.makedirs(klasor_yolu, exist_ok=True)
+
+    indirilen_sayisi = 0
+    kaydedilen_kayit = 0
+    yeni_kayitlar = []
+    eslesen_sayisi = 0
+
+    for href in tum_pdfler:
+        dosya_adi = href.split('/')[-1].split('?')[0]
+        if not dosya_adi.endswith('.pdf'):
+            dosya_adi += ".pdf"
+
+        if tip == "stadiu" and not stadiu_dosya_kategorisi_uyusuyor_mu(dosya_adi, alt_kategori):
+            continue
+        if tip == "ordine" and not ordine_dosya_kategorisi_uyusuyor_mu(dosya_adi, alt_kategori):
+            continue
+        eslesen_sayisi += 1
+
+        hedef_yol = os.path.join(klasor_yolu, dosya_adi)
+        if os.path.exists(hedef_yol):
+            if pdf_zaten_islenmis_mi(kontrol_conn, tip, alt_kategori, dosya_adi):
+                continue
+            try:
+                eklenen, yeni = pdf_verilerini_ice_aktar(hedef_yol, tip, alt_kategori, kaynak_url=href)
+                kaydedilen_kayit += eklenen
+                yeni_kayitlar.extend(yeni)
+            except Exception as e:
+                print(f"      ✗ (B Planı) Veritabanına işlenirken hata: {str(e)[:80]}")
+            continue
+
+        try:
+            pdf_res = http_oturum.get(href, timeout=45, headers={"Referer": "https://cetatenie.just.ro/"})
+            if pdf_res.status_code == 200 and len(pdf_res.content) > 1000:
+                with open(hedef_yol, 'wb') as f:
+                    f.write(pdf_res.content)
+                with open(hedef_yol + ".url", "w", encoding="utf-8") as f:
+                    f.write(href)
+                eklenen, yeni = pdf_verilerini_ice_aktar(hedef_yol, tip, alt_kategori, kaynak_url=href)
+                kaydedilen_kayit += eklenen
+                yeni_kayitlar.extend(yeni)
+                indirilen_sayisi += 1
+                print(f"      ✓ (B Planı) Kaydedildi: {dosya_adi}")
+            else:
+                print(f"      ✗ (B Planı) Geçersiz: {dosya_adi}")
+        except Exception as e:
+            print(f"      ✗ (B Planı) Hata: {str(e)[:60]}")
+        time.sleep(1.5)
+
+    print(f"  🔁 B Planı tamamlandı: {eslesen_sayisi} eşleşen PDF, {indirilen_sayisi} yeni indirildi.")
+    return indirilen_sayisi, kaydedilen_kayit, yeni_kayitlar
+
+
 def _bildirimleri_gonder(tum_yeni_kayitlar, bulunamayan_kategoriler, toplam_pdf_bulunan):
     # 1) Genel duyuru: yeni kayıt varsa TÜM kullanıcılara bildirim.
     if tum_yeni_kayitlar:
@@ -412,6 +533,22 @@ def botu_calistir():
                         print(f"  ! '{alt_kategori}' sayfada bulunamadı, atlanıyor.")
                         bulunamayan_kategoriler.append(f"{tip}/{alt_kategori}")
                         _teshis_kaydet(page, tip, alt_kategori, url)
+
+                        # B PLANI (2026-08-19): A Planı bu kategoriyi hiç
+                        # bulamadı -- muhtemelen site tasarımı yine değişti
+                        # (tıpkı bugün Ordine'de olduğu gibi). Tasarımdan
+                        # bağımsız wp-json keşfiyle telafi etmeyi dene.
+                        try:
+                            b_indirilen, b_kaydedilen, b_yeni = _b_plani_devreye_al(
+                                tip, alt_kategori, http_oturum, kontrol_conn
+                            )
+                            indirilen += b_indirilen
+                            kaydedilen_kayit += b_kaydedilen
+                            tum_yeni_kayitlar.extend(b_yeni)
+                            toplam_pdf_bulunan += b_indirilen
+                        except Exception as e:
+                            print(f"  ✗ B Planı çağrısı başarısız: {str(e)[:80]}")
+
                         continue
 
                     print(f"\n  → Kategori açılıyor: {alt_kategori}")
