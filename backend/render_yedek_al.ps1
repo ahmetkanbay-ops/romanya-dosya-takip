@@ -1,4 +1,4 @@
-# ============================================================================
+﻿# ============================================================================
 # Romanya Dosya Takip -- Render'dan haftalık yerel yedek alma (2026-08-19)
 #
 # Windows Task Scheduler tarafından haftada bir tetiklenir. Bilgisayar o an

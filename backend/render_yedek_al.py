@@ -15,7 +15,7 @@ ayrıca bir bulut hesabına göndermeye GEREK YOK).
 Ne yapılır:
   1) Veritabanı: Render'da SQLite'ın kendi "online backup" API'siyle
      (WAL-güvenli) taze bir kopya alınır, gzip ile sıkıştırılır, indirilir.
-     Sadece son YEDEK_SAKLAMA_HAFTA kadarı saklanır, eskiler silinir.
+     Sadece son YEDEK_SAKLAMA_ADET kopya saklanır (sabit boyut), eskiler silinir.
   2) PDF'ler: Render'daki TÜM PDF dosyalarının listesi (yol+boyut) çekilir,
      yerelde ZATEN VAR olanlar atlanır -- sadece YENİ eklenen PDF'ler
      indirilir (haftada haftada aynı 750MB+'ı tekrar tekrar çekmemek için).
@@ -37,7 +37,7 @@ DB_YEDEK_KLASOR = os.path.join(YEDEK_KOK, "veritabani")
 PDF_YEDEK_KLASOR = os.path.join(YEDEK_KOK, "pdfs")
 LOG_DOSYASI = os.path.join(YEDEK_KOK, "yedek_gecmisi.log")
 
-YEDEK_SAKLAMA_HAFTA = 8  # DB yedeklerinden bundan eskisi otomatik silinir
+YEDEK_SAKLAMA_ADET = 2  # DB yedeklerinden sadece en yeni bu kadarı tutulur (sabit boyut icin)
 
 SSH_ANAHTAR = os.path.expanduser("~/.ssh/render_romanya")
 SSH_HEDEF = "srv-d9r91j2fngtc73crlk5g@ssh.frankfurt.render.com"
@@ -113,15 +113,21 @@ def veritabani_yedekle():
     boyut_mb = os.path.getsize(hedef_yol) / (1024 * 1024)
     _log(f"Veritabani yedegi tamamlandi: {hedef_yol} ({boyut_mb:.1f} MB)")
 
-    sinir = time.time() - (YEDEK_SAKLAMA_HAFTA * 7 * 24 * 60 * 60)
+    # 2026-08-20 DÜZELTMESİ (kullanıcı fark etti): "8 hafta sakla" politikası
+    # ~8GB'a kadar birikebiliyordu (her DB ~1GB) -- gereksiz büyük. Artık
+    # yaşa göre değil, SAYIYA göre: sadece en yeni YEDEK_SAKLAMA_ADET kopya
+    # tutuluyor, sabit boyutta kalıyor (2 kopya = indirme yarıda kesilirse
+    # bile elde en az 1 sağlam yedek kalsın diye 1 değil 2).
+    dosyalar = sorted(
+        (ad for ad in os.listdir(DB_YEDEK_KLASOR) if ad.startswith("dosyalar_") and ad.endswith(".db")),
+        reverse=True,
+    )
     silinen = 0
-    for ad in os.listdir(DB_YEDEK_KLASOR):
-        tam = os.path.join(DB_YEDEK_KLASOR, ad)
-        if ad.startswith("dosyalar_") and ad.endswith(".db") and os.path.getmtime(tam) < sinir:
-            os.remove(tam)
-            silinen += 1
+    for ad in dosyalar[YEDEK_SAKLAMA_ADET:]:
+        os.remove(os.path.join(DB_YEDEK_KLASOR, ad))
+        silinen += 1
     if silinen:
-        _log(f"  ({silinen} eski DB yedegi silindi, {YEDEK_SAKLAMA_HAFTA} haftadan eski)")
+        _log(f"  ({silinen} eski DB yedegi silindi, sadece son {YEDEK_SAKLAMA_ADET} kopya tutuluyor)")
 
     return True
 

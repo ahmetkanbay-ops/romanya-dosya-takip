@@ -625,4 +625,172 @@ def tabloyu_hazirla(conn):
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_sistem_olay_tipi_zaman ON sistem_olaylari(olay_tipi, zaman)")
 
+    # 2026-08-20 (sıra tahmini özelliği): stadiu'da olup henüz ordine'de
+    # eşleşmeyen (yani hâlâ bekleyen) başvuruların ÖNCEDEN HESAPLANMIŞ
+    # listesi. dosyalar tablosu 1.3M+ satır olduğu için "hâlâ bekliyor mu"
+    # sorgusunu her arama isteğinde canlı hesaplamak (NOT EXISTS ile devasa
+    # bir tabloyu taramak) çok yavaş olurdu -- bunun yerine her gece tarama
+    # bitince TEK SEFERLİK yeniden hesaplanıp burada saklanıyor, sorgu anında
+    # sadece bu (küçük, indeksli) tablo sayılıyor. bkz. bekleme_kuyrugunu_guncelle().
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS bekleyen_dosyalar (
+            dosya_no_norm TEXT NOT NULL,
+            dosya_no_norm_int INTEGER NOT NULL,
+            yil TEXT NOT NULL,
+            alt_kategori TEXT NOT NULL,
+            PRIMARY KEY (dosya_no_norm, yil, alt_kategori)
+        )
+    """)
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_bekleyen_kuyruk "
+        "ON bekleyen_dosyalar(alt_kategori, yil, dosya_no_norm_int)"
+    )
+    # dosyalar tablosunda ana_kategori+dosya_no_norm+yil üzerinden hızlı
+    # "eşleşme var mı" kontrolü için (bekleme_kuyrugunu_guncelle'nin NOT
+    # EXISTS sorgusu bu indeksi kullanıyor).
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_dosya_ana_norm_yil "
+        "ON dosyalar(ana_kategori, dosya_no_norm, yil)"
+    )
+
     conn.commit()
+
+
+# 2026-08-20 (sıra tahmini özelliği): "İşlemde" durumundaki maddeler --
+# görüşme/mülakat listeleri (REZULTATE/INVITATII) bir "bekleme kuyruğu"
+# değil, ayrı bir süreç (davet/sonuç listesi) olduğu için kasıtlı olarak
+# DIŞARIDA bırakıldı.
+_BEKLEME_KUYRUGU_ALT_KATEGORILERI = [
+    "ARTICOLUL 11", "ARTICOLUL 8", "ARTICOLUL 8″1", "ARTICOLUL 8″2",
+    "ARTICOLUL 10", "NR. DOSAR",
+]
+
+
+def bekleme_kuyrugunu_guncelle(conn):
+    """
+    'bekleyen_dosyalar' tablosunu SIFIRDAN yeniden hesaplar: stadiu'da
+    kayıtlı olup, AYNI numara+yıl ile ordine'nin HERHANGİ bir alt
+    kategorisinde eşleşmesi bulunmayan (yani henüz onaylanmamış) tüm
+    kayıtları listeler.
+
+    Neden ordine'nin HERHANGİ bir alt kategorisi (belirli bir eşleşme
+    değil)? -- main.py /api/sorgula'daki (2026-08-19'da doğrulanmış) aynı
+    ilke: aynı dosya_no_norm + yıl ikilisi neredeyse her zaman TEK bir
+    kişiye ait, hangi madde altında yayınlandığından bağımsız olarak.
+
+    Bu fonksiyon HAFİF DEĞİL (900K+ satırlık stadiu tablosunu tarıyor) --
+    her sorguda değil, sadece bot.py'nin günlük taramasının SONUNDA bir
+    kez çağrılmalı. Süre birkaç saniye ile birkaç dakika arasında olabilir,
+    veritabanı boyutuna bağlı.
+    """
+    yer_tutucular = ",".join("?" * len(_BEKLEME_KUYRUGU_ALT_KATEGORILERI))
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM bekleyen_dosyalar")
+    cursor.execute(
+        f"""
+        INSERT INTO bekleyen_dosyalar (dosya_no_norm, dosya_no_norm_int, yil, alt_kategori)
+        SELECT DISTINCT s.dosya_no_norm, CAST(s.dosya_no_norm AS INTEGER), s.yil, s.alt_kategori
+        FROM dosyalar s
+        WHERE s.ana_kategori = 'stadiu'
+          AND s.yil IS NOT NULL
+          AND s.alt_kategori IN ({yer_tutucular})
+          AND NOT EXISTS (
+              SELECT 1 FROM dosyalar o
+              WHERE o.ana_kategori = 'ordine'
+                AND o.dosya_no_norm = s.dosya_no_norm
+                AND o.yil = s.yil
+          )
+        """,
+        _BEKLEME_KUYRUGU_ALT_KATEGORILERI,
+    )
+    eklenen = cursor.rowcount
+    guvenli_commit(conn)
+    return eklenen
+
+
+def sira_tahmini_hesapla(conn, dosya_no_norm, yil, alt_kategori):
+    """
+    Belirli bir (dosya_no_norm, yil, alt_kategori) için 'bekleyen_dosyalar'
+    kuyruğundaki konumunu hesaplar. Dönen değer None ise, bu kayıt kuyrukta
+    yok -- ya zaten onaylanmış (ordine'de eşleşmiş) ya da hiç stadiu'da
+    kayıtlı değil ya da bu madde kuyruk kapsamında değil (interview/sonuç
+    listeleri gibi).
+
+    ÖNEMLİ (dürüstlük): dosya_no_norm_int TEK BAŞINA yıllar arası kronolojik
+    değil -- Romanya'nın numaralandırması HER YIL yeniden başlıyor (bugün
+    canlı veriyle doğrulandı, ör. '100' numarası 2018-2025 arası her yılda
+    farklı bir kişiye ait). Bu yüzden "tüm zamanlar" sıralaması (yıl, numara)
+    ikilisine göre KRONOLOJİK yapılıyor, sadece numaraya göre DEĞİL.
+    """
+    if not (alt_kategori in _BEKLEME_KUYRUGU_ALT_KATEGORILERI and yil):
+        return None
+
+    try:
+        numara_int = int(dosya_no_norm)
+    except (TypeError, ValueError):
+        return None
+
+    cursor = conn.cursor()
+
+    # Bu kayıt gerçekten kuyrukta mı? (zaten onaylanmışsa ya da hiç
+    # kayıtlı değilse sıra tahmini yapmanın hiçbir anlamı yok.)
+    cursor.execute(
+        "SELECT 1 FROM bekleyen_dosyalar WHERE dosya_no_norm = ? AND yil = ? AND alt_kategori = ?",
+        (dosya_no_norm, yil, alt_kategori),
+    )
+    if cursor.fetchone() is None:
+        return None
+
+    # -- Kendi yılına göre --
+    cursor.execute(
+        "SELECT COUNT(*) FROM bekleyen_dosyalar WHERE alt_kategori = ? AND yil = ? AND dosya_no_norm_int < ?",
+        (alt_kategori, yil, numara_int),
+    )
+    onundeki_yil = cursor.fetchone()[0]
+    cursor.execute(
+        "SELECT COUNT(*) FROM bekleyen_dosyalar WHERE alt_kategori = ? AND yil = ?",
+        (alt_kategori, yil),
+    )
+    toplam_yil = cursor.fetchone()[0]
+
+    # -- Tüm zamanlar (kronolojik: önce yıl, sonra numara) --
+    cursor.execute(
+        "SELECT COUNT(*) FROM bekleyen_dosyalar WHERE alt_kategori = ? "
+        "AND (yil < ? OR (yil = ? AND dosya_no_norm_int < ?))",
+        (alt_kategori, yil, yil, numara_int),
+    )
+    onundeki_tum = cursor.fetchone()[0]
+    cursor.execute(
+        "SELECT COUNT(*) FROM bekleyen_dosyalar WHERE alt_kategori = ?",
+        (alt_kategori,),
+    )
+    toplam_tum = cursor.fetchone()[0]
+
+    # -- Onay yüzdesi (kendi yılı+maddesi için) --
+    # 2026-08-20 (kullanıcının mockup'ında "%25 onaylandı" halkası vardı):
+    # o yıl+maddede toplam kaç başvuru vardı (dosyalar tablosunda stadiu
+    # tarafında kayıtlı olan TÜM numaralar, onaylanmış olsun olmasın) --
+    # bekleyen sayısı çıkarılınca onaylanan sayısı bulunuyor.
+    cursor.execute(
+        "SELECT COUNT(DISTINCT dosya_no_norm) FROM dosyalar WHERE ana_kategori = 'stadiu' AND alt_kategori = ? AND yil = ?",
+        (alt_kategori, yil),
+    )
+    yil_toplam_basvuru = cursor.fetchone()[0]
+    yil_onaylanan = max(yil_toplam_basvuru - toplam_yil, 0)
+    onay_yuzdesi = (yil_onaylanan / yil_toplam_basvuru * 100) if yil_toplam_basvuru else 0.0
+
+    return {
+        "kendi_yilinda": {
+            "onundeki_sayisi": onundeki_yil,
+            "sirasi": onundeki_yil + 1,
+            "yil_toplam_bekleyen": toplam_yil,
+            "yil_toplam_basvuru": yil_toplam_basvuru,
+            "yil_onaylanan": yil_onaylanan,
+            "onay_yuzdesi": round(onay_yuzdesi, 1),
+        },
+        "tum_zamanlar": {
+            "onundeki_sayisi": onundeki_tum,
+            "sirasi": onundeki_tum + 1,
+            "toplam_bekleyen": toplam_tum,
+        },
+    }

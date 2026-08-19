@@ -84,6 +84,7 @@ from dosya_utils import (
     stadiu_dosya_kategorisi_uyusuyor_mu,
     ordine_dosya_kategorisi_uyusuyor_mu,
     sistem_olayi_kaydet,
+    bekleme_kuyrugunu_guncelle,
     ROMANYA_SAAT_DILIMI,
 )
 from bildirim import expo_push_gonder, admin_kritik_uyari
@@ -841,6 +842,18 @@ def botu_calistir():
         _olay_conn.close()
     except Exception as e:
         print(f"✗ Tarama olay kaydı başarısız: {str(e)[:80]}")
+
+    # 2026-08-20 (sıra tahmini özelliği): her taramadan sonra "hâlâ
+    # bekleyen" listesi yeniden hesaplanıyor -- yeni ordine eşleşmeleri
+    # kuyruktan çıkar, yeni stadiu kayıtları kuyruğa girer. Bu, taramanın
+    # ANA işlevini ASLA engellememeli -- ayrı, bağımsız bir try/except.
+    try:
+        _kuyruk_conn = veritabani_baglantisi(DB_FILE)
+        _kuyruk_sayisi = bekleme_kuyrugunu_guncelle(_kuyruk_conn)
+        _kuyruk_conn.close()
+        print(f"✓ Bekleme kuyruğu güncellendi: {_kuyruk_sayisi} dosya hâlâ bekliyor.")
+    except Exception as e:
+        print(f"✗ Bekleme kuyruğu güncellenemedi: {str(e)[:80]}")
 
     try:
         _bildirimleri_gonder(tum_yeni_kayitlar, bulunamayan_kategoriler, toplam_pdf_bulunan)
