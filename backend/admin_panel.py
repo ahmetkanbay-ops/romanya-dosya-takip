@@ -18,6 +18,18 @@ import html
 import os
 import time
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+from dosya_utils import ROMANYA_SAAT_DILIMI
+
+# 2026-08-19 DÜZELTMESİ (kullanıcı fark etti, verileri panelle çapraz
+# doğruladıktan sonra sordu): rakamların KENDİSİ hep doğruydu ama "bugün/
+# hafta/ay yeni cihaz" eşiği ve olay zaman damgaları UTC ile
+# gösteriliyordu (SQLite'ın CURRENT_TIMESTAMP'ı HER ZAMAN UTC'dir) --
+# Romanya saatiyle karşılaştırıldığında birkaç saatlik bir kaymaya
+# (görsel, matematiksel değil) yol açıyordu. Artık her yerde tutarlı
+# şekilde Romanya saatine çevriliyor.
+_UTC = ZoneInfo("UTC")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # 2026-08-19 (Render'a taşıma): bkz. main.py'deki aynı isimli sabitin notu.
@@ -77,7 +89,7 @@ def metrikleri_hesapla(conn, db_dosyasi, son_basarili_tarama):
     """Tüm admin paneli metriklerini tek bir sözlükte toplar. `conn`,
     main.py'nin zaten kullandığı row_factory=sqlite3.Row bağlantısıdır."""
     c = conn.cursor()
-    simdi = datetime.now()
+    simdi = datetime.now(ROMANYA_SAAT_DILIMI)
 
     # --- 1) Kullanıcı sayıları -------------------------------------------
     c.execute("SELECT COUNT(*) FROM push_tokenlari")
@@ -85,7 +97,11 @@ def metrikleri_hesapla(conn, db_dosyasi, son_basarili_tarama):
 
     yeni_cihaz = {}
     for etiket, gun in [("bugun", 1), ("hafta", 7), ("ay", 30)]:
-        esik = (simdi - timedelta(days=gun)).isoformat()
+        # Eşik Romanya saatine göre hesaplanıp, SQLite'ın kendi sakladığı
+        # formata (UTC, boşluklu, "YYYY-MM-DD HH:MM:SS") çevrilerek
+        # karşılaştırılıyor -- ikisi de aynı ANI temsil etsin diye.
+        esik_utc = (simdi - timedelta(days=gun)).astimezone(_UTC)
+        esik = esik_utc.strftime("%Y-%m-%d %H:%M:%S")
         c.execute("SELECT COUNT(*) FROM push_tokenlari WHERE olusturma_tarihi >= ?", (esik,))
         yeni_cihaz[etiket] = c.fetchone()[0]
 
@@ -111,7 +127,9 @@ def metrikleri_hesapla(conn, db_dosyasi, son_basarili_tarama):
     c.execute("SELECT durum, COUNT(*) FROM dosyalar GROUP BY durum")
     durum_dagilimi = dict(c.fetchall())
 
-    esik_7gun = (simdi - timedelta(days=7)).isoformat()
+    # sistem_olaylari.zaman de SQLite'ın kendi CURRENT_TIMESTAMP'ı (UTC) --
+    # aynı çevrim burada da gerekiyor.
+    esik_7gun = (simdi - timedelta(days=7)).astimezone(_UTC).strftime("%Y-%m-%d %H:%M:%S")
     c.execute(
         "SELECT COUNT(*) FROM sistem_olaylari WHERE olay_tipi='kritik_uyari' AND zaman >= ?",
         (esik_7gun,),
@@ -201,7 +219,11 @@ def _olay_satirlari_html(olaylar, bos_mesaj):
     satirlar = []
     for detay, zaman in olaylar:
         try:
-            zaman_okunabilir = datetime.fromisoformat(zaman).strftime("%d.%m.%Y %H:%M")
+            ayristirilan = datetime.fromisoformat(zaman)
+            if ayristirilan.tzinfo is None:
+                # sistem_olaylari.zaman SQLite'ın CURRENT_TIMESTAMP'ı -- UTC, saat dilimsiz.
+                ayristirilan = ayristirilan.replace(tzinfo=_UTC)
+            zaman_okunabilir = ayristirilan.astimezone(ROMANYA_SAAT_DILIMI).strftime("%d.%m.%Y %H:%M")
         except Exception:
             zaman_okunabilir = _e(zaman)
         satirlar.append(
@@ -229,7 +251,13 @@ def admin_sayfa_html(m):
     son_tarama_metin = "Hiç tarama kaydı yok."
     if s["son_basarili_tarama"]:
         try:
-            zaman = datetime.fromisoformat(s["son_basarili_tarama"]).strftime("%d.%m.%Y %H:%M")
+            ayristirilan = datetime.fromisoformat(s["son_basarili_tarama"])
+            if ayristirilan.tzinfo is not None:
+                # Yeni kayıtlar saat dilimi bilgisiyle yazılıyor (bot.py) --
+                # emin olmak için Romanya saatine çevir (zaten öyleyse etkisiz).
+                ayristirilan = ayristirilan.astimezone(ROMANYA_SAAT_DILIMI)
+            # tzinfo yoksa: eski kayıt, zaten yerel (Romanya) saatiyle yazılmıştı -- olduğu gibi kullan.
+            zaman = ayristirilan.strftime("%d.%m.%Y %H:%M")
         except Exception:
             zaman = _e(s["son_basarili_tarama"])
         son_tarama_metin = f"{zaman}"
