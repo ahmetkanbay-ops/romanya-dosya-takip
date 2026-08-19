@@ -69,6 +69,7 @@ from dosya_utils import (
     veritabani_baglantisi,
     guvenli_commit,
     ROMANYA_SAAT_DILIMI,
+    sira_tahmini_hesapla,
 )
 from hukuki_metinler import (
     KULLANIM_SARTLARI_METIN,
@@ -870,6 +871,16 @@ def sorgula(veri: SorguIstegi, request: Request, _anahtar=Depends(app_anahtarini
             gorulen.add(anahtar)
             baska_kategoride_bulundu.append(_satirdan_sonuc(row, request))
 
+        # 2026-08-20 DÜZELTMESİ (kullanıcı canlı testte fark etti): bu
+        # "güvenli alternatif" (yıl sabit, kategori serbest) sonuçları
+        # ÖNCEDEN sadece gösteriliyordu, otomatik arka plan izlemesine hiç
+        # ALINMIYORDU -- yani kullanıcı tam da en çok merak edeceği anda
+        # (dosyası stadiu'da bekliyor, henüz ordine'de değil) hiçbir
+        # bildirim alamıyordu. Artık normal sonuçlarla AYNI muameleyi
+        # görüyor -- ana_kategori='stadiu' olan her eşleşme sessizce
+        # izlemeye alınıyor.
+        _otomatik_izlemeye_al(veri.cihaz_kimligi, baska_kategoride_bulundu)
+
     return {
         "dosya_no": ham_no,
         "bulundu": False,
@@ -887,6 +898,55 @@ def sorgula(veri: SorguIstegi, request: Request, _anahtar=Depends(app_anahtarini
             "eslesti": False,
             "baska_kategoride_bulundu": baska_kategoride_bulundu,
         }],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Sıra tahmini (2026-08-20)
+# ---------------------------------------------------------------------------
+class SiraTahminiIstegi(BaseModel):
+    dosya_no: str = Field(max_length=100)
+    yil: str = Field(max_length=10)
+    alt_kategori: str = Field(max_length=100)
+
+
+@app.post("/api/sira-tahmini")
+@limiter.limit("20/minute")
+def sira_tahmini(veri: SiraTahminiIstegi, request: Request, _anahtar=Depends(app_anahtarini_dogrula)):
+    """
+    Bir dosyanın 'bekleyen_dosyalar' kuyruğundaki (her gece yeniden
+    hesaplanan, bkz. dosya_utils.bekleme_kuyrugunu_guncelle) konumunu
+    döndürür.
+
+    ÖNEMLİ (dürüstlük): bu, BAŞVURU SIRASINA (dosya numarasına) göre
+    tahmini bir konumdur -- Romanya'nın gerçek işleme sırasının numara
+    sırasını birebir takip ettiğinin GARANTİSİ yoktur (bugüne kadarki
+    canlı gözlemlerimizde kararnamelerin numara sırasına uymadığı
+    görüldü). Mobil tarafta bu netlik korunarak sunulmalı.
+    """
+    dosya_no_norm = sayisal_cekirdek(veri.dosya_no)
+    if not dosya_no_norm:
+        raise HTTPException(status_code=400, detail="Geçersiz dosya numarası.")
+
+    conn = veritabani_baglantisi(DB_FILE, row_factory=sqlite3.Row)
+    sonuc = sira_tahmini_hesapla(conn, dosya_no_norm, veri.yil.strip(), veri.alt_kategori.strip())
+    conn.close()
+
+    if sonuc is None:
+        return {
+            "bulundu": False,
+            "mesaj": "Bu dosya için sıra tahmini yapılamıyor -- ya zaten sonuçlanmış, "
+                     "ya hiç kayıtlı değil ya da bu madde sıra takibi kapsamında değil.",
+        }
+
+    return {
+        "bulundu": True,
+        "dosya_no": veri.dosya_no,
+        "yil": veri.yil,
+        "alt_kategori": veri.alt_kategori,
+        **sonuc,
+        "uyari": "Bu, başvuru sırasına (dosya numarasına) göre tahmini bir konumdur -- "
+                 "resmi işlem sırasının garantisi değildir.",
     }
 
 

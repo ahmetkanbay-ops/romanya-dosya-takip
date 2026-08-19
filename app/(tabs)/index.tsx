@@ -597,6 +597,30 @@ export default function IndexScreen() {
                               <Text style={styles.resmiLinkMetin}>{t.resmiBelgeButon}</Text>
                             </TouchableOpacity>
                           ) : null}
+                          {/* 2026-08-20 DÜZELTMESİ (kullanıcı fark etti): bu
+                              aşama-geçiş kartında (stadiu'da bekleyen dosya)
+                              favori butonu hiç yoktu -- tam da kullanıcının
+                              "onaylandığında haber ver" isteyeceği senaryoda
+                              hiçbir bildirim imkanı sunulmuyordu. Backend zaten
+                              bu kaydı artık otomatik izlemeye alıyor (bkz.
+                              main.py sorgula() düzeltmesi); burada da elle
+                              favoriye eklenebilsin diye aynı buton ekleniyor. */}
+                          {digerKayit.eslesti ? (() => {
+                            const anahtar = favoriAnahtariOlustur(digerKayit);
+                            const buFavoride = favoriAnahtarlari.has(anahtar);
+                            const buIslemde = favoriIslemdeAnahtarlari.has(anahtar);
+                            return (
+                              <TouchableOpacity
+                                style={[styles.favoriButon, buFavoride && styles.favoriButonAktif]}
+                                onPress={() => favoriyeEkleCikar(digerKayit)}
+                                disabled={buIslemde}
+                              >
+                                <Text style={[styles.favoriButonMetin, buFavoride && styles.favoriButonMetinAktif]}>
+                                  {buIslemde ? '…' : (buFavoride ? t.favoridekiButon : t.favoriEkleButon)}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })() : null}
                         </>
                       );
                     })()}
