@@ -16,6 +16,7 @@ sayfada bulunamıyorsa admin'e uyarı gönderilir.
 doğrudan dosya_utils.py'deki sabit liste üzerinden TEK TEK aranıp
 tıklanarak bulunuyor (bkz. _kategori_elementini_bul).
 """
+import json
 import os
 import sqlite3
 import time
@@ -331,12 +332,20 @@ def _teshis_kaydet(page, tip, alt_kategori, url):
 # edilmiş) indirme döngüsüne KASITLI OLARAK dokunulmadı -- bu iki fonksiyon
 # tamamen izole, kendi indirme mantığını taşıyor. Amaç: B Planı'ndaki
 # olası bir hata, A Planı'nın çalışan akışını hiçbir şekilde etkileyemesin.
-def _wp_json_ile_pdf_kesfet(taban_url="https://cetatenie.just.ro", sayfa_sayisi_limit=20, sayfa_basi=50):
+def _wp_json_ile_pdf_kesfet(page, taban_url="https://cetatenie.just.ro", sayfa_sayisi_limit=20, sayfa_basi=50):
     """
     WordPress'in yerleşik REST API'si üzerinden site genelinde yüklenmiş
     TÜM PDF medyalarını (en yeniden eskiye) keşfeder. Sayfa tasarımıyla
     hiçbir ilgisi yok -- site menüsünü/sekmelerini değiştirse bile bu uç
     nokta (WordPress çekirdek özelliği) genelde aynı kalır.
+
+    2026-08-19 DÜZELTMESİ (canlı testle bulundu): bu uç nokta da site
+    genelindeki WAF'ın JS meydan okumasının ("Verifying your browser...")
+    ARKASINDA -- düz `requests`/`curl_cffi` (JS ÇALIŞTIRMAZLAR) her zaman
+    503 alır, hiçbir zaman gerçek JSON'a ulaşamaz. Bu yüzden A Planı'nın
+    zaten kullandığı GERÇEK Playwright/Firefox `page` nesnesi üzerinden
+    (meydan okuma otomatik çözülene kadar bekleyip) istek atılıyor --
+    canlı testte doğrulandı: ~4sn içinde gerçek PDF verisi geliyor.
     """
     kesfedilen = []
     for sayfa in range(1, sayfa_sayisi_limit + 1):
@@ -346,23 +355,38 @@ def _wp_json_ile_pdf_kesfet(taban_url="https://cetatenie.just.ro", sayfa_sayisi_
             f"&orderby=date&order=desc&page={sayfa}"
         )
         try:
-            yanit = requests.get(istek_url, timeout=20, headers=TARAYICI_BASLIKLARI)
-            if yanit.status_code != 200:
+            page.goto(istek_url, wait_until="domcontentloaded", timeout=30000)
+            # WAF meydan okumasının çözülmesini bekle (en fazla 15sn) --
+            # aynı desen, projede başka yerlerde de kullanılıyor.
+            for _ in range(15):
+                if "verifying" not in page.content().lower():
+                    break
+                time.sleep(1)
+
+            metin = page.evaluate("() => document.body.innerText")
+            veri = json.loads(metin)
+
+            # WP REST API, sayfa sayısı aşıldığında liste yerine
+            # {"code": "rest_post_invalid_page_number", ...} döner --
+            # bu, "daha fazla sayfa yok, dur" sinyalidir.
+            if isinstance(veri, dict) and veri.get("code"):
                 break
-            veri = yanit.json()
             if not veri:
                 break
+
             for madde in veri:
                 kaynak = madde.get("source_url")
                 if kaynak and kaynak.lower().endswith(".pdf"):
                     kesfedilen.append(kaynak)
+
+            time.sleep(1.5)  # siteye nazik davranmak için sayfalar arası bekleme
         except Exception as e:
             print(f"  ✗ B Planı (wp-json) keşif hatası (sayfa {sayfa}): {str(e)[:80]}")
             break
     return kesfedilen
 
 
-def _b_plani_devreye_al(tip, alt_kategori, http_oturum, kontrol_conn):
+def _b_plani_devreye_al(page, tip, alt_kategori, http_oturum, kontrol_conn):
     """
     A Planı bir kategoriyi HİÇ bulamadığında çağrılır. wp-json üzerinden
     keşfedilen TÜM PDF'ler arasından, dosya adı bu alt_kategoriyle uyuşanları
@@ -372,7 +396,7 @@ def _b_plani_devreye_al(tip, alt_kategori, http_oturum, kontrol_conn):
     """
     print(f"  🔁 B Planı devreye giriyor: '{alt_kategori}' için wp-json üzerinden keşif deneniyor...")
     try:
-        tum_pdfler = _wp_json_ile_pdf_kesfet()
+        tum_pdfler = _wp_json_ile_pdf_kesfet(page)
     except Exception as e:
         print(f"  ✗ B Planı tamamen başarısız oldu: {str(e)[:80]}")
         return 0, 0, []
@@ -540,7 +564,7 @@ def botu_calistir():
                         # bağımsız wp-json keşfiyle telafi etmeyi dene.
                         try:
                             b_indirilen, b_kaydedilen, b_yeni = _b_plani_devreye_al(
-                                tip, alt_kategori, http_oturum, kontrol_conn
+                                page, tip, alt_kategori, http_oturum, kontrol_conn
                             )
                             indirilen += b_indirilen
                             kaydedilen_kayit += b_kaydedilen
