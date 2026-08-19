@@ -1,5 +1,6 @@
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 
 // YEDEK (fallback) yerel IP -- Faz 3'te Render'a taşındığında bu satır ve
 // aşağıdaki otomatik tespit mekanizması tamamen ortadan kalkacak. Sadece
@@ -70,6 +71,29 @@ function rastgeleKimlikUret(): string {
   return `cihaz-${rastgele}`;
 }
 
+// 2026-08-19 (yapılacaklar listesi madde 10 -- cihaz verisini şifreleme):
+// Cihaz kimliği artık ÖNCELİKLE expo-secure-store'da tutuluyor (Android
+// Keystore / iOS Keychain -- işletim sisteminin kendi şifreli deposu),
+// AsyncStorage'daki gibi düz metin DEĞİL. Bu, footer'daki "Secured &
+// Encrypted System" imzasının cihaz tarafını da gerçek kılıyor.
+//
+// ÖNEMLİ (ExpoCrypto çökmesinden alınan ders -- bkz. rastgeleKimlikUret
+// notu): expo-secure-store NATIVE bir modül, telefondaki mevcut dev
+// client/build bu paket eklenmeden ÖNCE derlendiyse SecureStore çağrıları
+// çalışmaz. Bu yüzden burada ASLA doğrudan çağrılmıyor -- önce
+// isAvailableAsync() ile (o da try/catch içinde) kontrol ediliyor, hiçbir
+// adımda hata fırlatılırsa sessizce eski AsyncStorage yoluna düşülüyor.
+// Yani: yeni native build'i olmayan eski bir kurulumda uygulama ASLA
+// çökmez, sadece yeni build alınana kadar eski (şifresiz) yöntemle çalışmaya
+// devam eder -- yeni build gelince otomatik olarak SecureStore'a geçer.
+async function secureStoreKullanilabilirMi(): Promise<boolean> {
+  try {
+    return await SecureStore.isAvailableAsync();
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Bu cihaz/kurulum için kalıcı, rastgele bir kimlik döndürür. Favorileri
  * "kim"in eklediğini backend'e söylemek için kullanılır (bkz.
@@ -77,10 +101,41 @@ function rastgeleKimlikUret(): string {
  * için gerçek bir Expo push token DEĞİL, bu cihaz kimliği). İleride gerçek
  * push bildirimleri eklendiğinde, gerçek token bu kimliğin YERİNE değil,
  * EK olarak /api/push-token'a kaydedilecek şekilde genişletilebilir.
- * AsyncStorage'da saklanır, ilk kullanımda bir kere üretilir.
  */
 export async function cihazKimligiGetir(): Promise<string> {
   if (bellekteCihazKimligi) return bellekteCihazKimligi;
+
+  if (await secureStoreKullanilabilirMi()) {
+    try {
+      const guvenliKayitli = await SecureStore.getItemAsync(CIHAZ_KIMLIGI_ANAHTARI);
+      if (guvenliKayitli) {
+        bellekteCihazKimligi = guvenliKayitli;
+        return guvenliKayitli;
+      }
+      // Güvenli depoda yok -- daha ÖNCE (bu güncellemeden önce) AsyncStorage'a
+      // yazılmış bir kimlik olabilir. Öyleyse YENİ bir kimlik ÜRETMİYORUZ --
+      // varsa onu güvenli depoya TAŞIYIP kullanmaya devam ediyoruz. Aksi
+      // halde mevcut kullanıcıların favorileri/push kaydı, sahiplenilen
+      // kimlik değiştiği için sessizce "kaybolurdu".
+      const eskiKayitli = await AsyncStorage.getItem(CIHAZ_KIMLIGI_ANAHTARI).catch(() => null);
+      if (eskiKayitli) {
+        await SecureStore.setItemAsync(CIHAZ_KIMLIGI_ANAHTARI, eskiKayitli);
+        await AsyncStorage.removeItem(CIHAZ_KIMLIGI_ANAHTARI).catch(() => {});
+        bellekteCihazKimligi = eskiKayitli;
+        return eskiKayitli;
+      }
+      const yeni = rastgeleKimlikUret();
+      await SecureStore.setItemAsync(CIHAZ_KIMLIGI_ANAHTARI, yeni);
+      bellekteCihazKimligi = yeni;
+      return yeni;
+    } catch {
+      // SecureStore beklenmedik şekilde başarısız oldu -- aşağıdaki eski
+      // AsyncStorage yoluna sessizce düşülüyor, uygulama çökmüyor.
+    }
+  }
+
+  // Güvenli depo yok/kullanılamıyor -- eski (AsyncStorage) yöntem, geriye
+  // dönük uyumluluk için.
   try {
     const kayitli = await AsyncStorage.getItem(CIHAZ_KIMLIGI_ANAHTARI);
     if (kayitli) {
