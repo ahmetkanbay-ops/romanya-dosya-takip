@@ -63,3 +63,4 @@ backend/son_basarili_tarama.txt
 backend/__pycache__/
 __pycache__/
 *.pyc
+backend/render_yedekleri/
