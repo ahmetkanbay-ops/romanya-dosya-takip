@@ -364,6 +364,25 @@ def veritabani_baglantisi(db_dosyasi, row_factory=None):
     return conn
 
 
+def sistem_olayi_kaydet(conn, olay_tipi, detay=None):
+    """
+    2026-08-19 (admin istatistik paneli): işletimsel bir olayı (tarama
+    tamamlandı, bildirim gönderildi, kritik uyarı vb.) 'sistem_olaylari'
+    tablosuna kaydeder. Kişisel veri (dosya numarası, cihaz kimliği)
+    İÇERMEMELİDİR -- sadece "ne zaman ne oldu" özeti. Kayıt başarısız
+    olsa bile (ör. DB kilitli) ana işlemi ASLA durdurmaz, hatayı yutar --
+    istatistik kaydı, uygulamanın çalışması için kritik değildir.
+    """
+    try:
+        conn.execute(
+            "INSERT INTO sistem_olaylari (olay_tipi, detay) VALUES (?, ?)",
+            (olay_tipi, detay),
+        )
+        guvenli_commit(conn)
+    except Exception as e:
+        print(f"  ✗ sistem_olayi_kaydet başarısız ({olay_tipi}): {str(e)[:80]}")
+
+
 def pdf_zaten_islenmis_mi(conn, ana_kategori, alt_kategori, pdf_dosya):
     """
     Verilen PDF dosya adı, bu ana/alt kategoride veritabanında en az bir
@@ -536,5 +555,22 @@ def tabloyu_hazirla(conn):
         cursor.execute("ALTER TABLE favoriler ADD COLUMN otomatik_mi INTEGER NOT NULL DEFAULT 0")
         print("! 'favoriler' tablosuna 'otomatik_mi' kolonu eklendi (mevcut veri korunuyor).")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_favori_norm ON favoriler(dosya_no_norm)")
+
+    # 2026-08-19 EKLENTİSİ (admin istatistik paneli): tarama/bildirim gibi
+    # işletimsel OLAYLARI (kişisel veri İÇERMEZ -- hangi dosya numarasının
+    # arandığı gibi bir bilgi burada yok, sadece "ne zaman ne oldu" özeti)
+    # kaydeder. Amaç: /admin panelinde "son tarama kaç PDF buldu",
+    # "kaç bildirim gönderildi", "son 7 günde kaç kritik uyarı oldu" gibi
+    # soruları cevaplayabilmek -- bunlar öncesinde hiç kalıcı tutulmuyordu,
+    # sadece anlık gönderilip unutuluyordu.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sistem_olaylari (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            olay_tipi TEXT NOT NULL,
+            detay TEXT,
+            zaman TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_sistem_olay_tipi_zaman ON sistem_olaylari(olay_tipi, zaman)")
 
     conn.commit()

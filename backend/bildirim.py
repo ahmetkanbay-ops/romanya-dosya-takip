@@ -19,6 +19,23 @@ from email.mime.text import MIMEText
 
 import requests
 
+from dosya_utils import veritabani_baglantisi, sistem_olayi_kaydet
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_FILE = os.path.join(BASE_DIR, "dosyalar.db")
+
+
+def _olay_kaydet_sessizce(olay_tipi, detay=None):
+    """2026-08-19 (admin istatistik paneli): olay kaydı için kısa ömürlü
+    bir bağlantı açar. Herhangi bir hata bildirim gönderimini ASLA
+    engellememeli, bu yüzden burada da her şey sessizce yutuluyor."""
+    try:
+        conn = veritabani_baglantisi(DB_FILE)
+        sistem_olayi_kaydet(conn, olay_tipi, detay)
+        conn.close()
+    except Exception as e:
+        print(f"✗ Olay kaydı başarısız ({olay_tipi}): {str(e)[:80]}")
+
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -50,6 +67,7 @@ def expo_push_gonder(tokenlar, baslik, govde, veri=None):
     if not tokenlar:
         return
 
+    basarili_sayisi = 0
     for i in range(0, len(tokenlar), 100):
         parca = tokenlar[i:i + 100]
         mesajlar = [
@@ -63,8 +81,14 @@ def expo_push_gonder(tokenlar, baslik, govde, veri=None):
                 timeout=15,
                 headers={"Content-Type": "application/json", "Accept": "application/json"},
             )
+            basarili_sayisi += len(parca)
         except Exception as e:
             print(f"✗ Expo push gönderim hatası: {str(e)[:80]}")
+
+    if basarili_sayisi:
+        _olay_kaydet_sessizce(
+            "push_gonderildi", f"{basarili_sayisi} cihaza gönderildi: \"{baslik}\""
+        )
 
 
 def telegram_gonder(mesaj):
@@ -100,3 +124,4 @@ def admin_kritik_uyari(mesaj):
     """
     telegram_gonder(f"🚨 {mesaj}")
     eposta_gonder("🚨 Romanya Dosya Takip - Kritik Uyarı", mesaj)
+    _olay_kaydet_sessizce("kritik_uyari", mesaj)

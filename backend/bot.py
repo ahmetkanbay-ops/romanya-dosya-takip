@@ -82,6 +82,7 @@ from dosya_utils import (
     pdf_zaten_islenmis_mi,
     stadiu_dosya_kategorisi_uyusuyor_mu,
     ordine_dosya_kategorisi_uyusuyor_mu,
+    sistem_olayi_kaydet,
 )
 from bildirim import expo_push_gonder, admin_kritik_uyari
 
@@ -648,6 +649,23 @@ def botu_calistir():
             f.write(datetime.now().isoformat())
     except Exception as e:
         print(f"✗ Son tarama zamanı kaydedilemedi: {str(e)[:80]}")
+
+    # 2026-08-19 (admin istatistik paneli): tarama sonucu -- kaç PDF
+    # bulundu, kaç yeni kayıt eklendi -- kalıcı olarak kaydediliyor.
+    # Öncesinde bu bilgi taramanın sonunda kayboluyordu. kontrol_conn
+    # yukarıda zaten kapatıldığı için (satır 634) kısa ömürlü YENİ bir
+    # bağlantı açılıyor.
+    try:
+        _olay_conn = veritabani_baglantisi(DB_FILE)
+        sistem_olayi_kaydet(
+            _olay_conn,
+            "tarama_tamamlandi",
+            f"{toplam_pdf_bulunan} PDF bulundu, {kaydedilen_kayit} kayıt işlendi "
+            f"({len(tum_yeni_kayitlar)} yeni), {indirilen} yeni PDF indirildi.",
+        )
+        _olay_conn.close()
+    except Exception as e:
+        print(f"✗ Tarama olay kaydı başarısız: {str(e)[:80]}")
 
     try:
         _bildirimleri_gonder(tum_yeni_kayitlar, bulunamayan_kategoriler, toplam_pdf_bulunan)

@@ -28,6 +28,7 @@ from urllib.parse import quote
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -72,6 +73,7 @@ from hukuki_metinler import (
     GIZLILIK_POLITIKASI_METIN,
     sayfa_html,
 )
+from admin_panel import metrikleri_hesapla, admin_sayfa_html
 
 RESMI_LISTE_URL = "https://cetatenie.just.ro/"
 
@@ -102,6 +104,36 @@ def app_anahtarini_dogrula(x_app_key: Optional[str] = Header(default=None)):
     # attack) açıktır -- compare_digest sabit sürede karşılaştırır.
     if APP_API_KEY and not secrets.compare_digest(x_app_key or "", APP_API_KEY):
         raise HTTPException(status_code=401, detail="Geçersiz uygulama anahtarı")
+    return True
+
+
+# 2026-08-19 (/admin istatistik paneli): SADECE proje sahibinin göreceği,
+# hiçbir mobil özelliğin çalışması için GEREKLİ OLMAYAN, isteğe bağlı bir
+# yönetim sayfası. APP_API_KEY'in aksine (ayarlanmazsa "açık" kalıyor,
+# çünkü mobil uygulamanın çalışması buna bağlı), burada ayarlanmazsa
+# panel TAMAMEN KAPALI kalır (fail-closed) -- hassas kullanım
+# istatistiklerini varsayılan olarak herkese açık bırakmanın hiçbir
+# faydası yok, sadece riski var.
+ADMIN_KULLANICI_ADI = os.environ.get("ADMIN_KULLANICI_ADI", "admin")
+ADMIN_SIFRE = os.environ.get("ADMIN_SIFRE")
+
+_admin_guvenlik = HTTPBasic()
+
+
+def admin_girisini_dogrula(kimlik: HTTPBasicCredentials = Depends(_admin_guvenlik)):
+    if not ADMIN_SIFRE:
+        raise HTTPException(
+            status_code=503,
+            detail="Admin paneli devre dışı: ADMIN_SIFRE ortam değişkeni ayarlanmamış.",
+        )
+    kullanici_dogru = secrets.compare_digest(kimlik.username, ADMIN_KULLANICI_ADI)
+    sifre_dogru = secrets.compare_digest(kimlik.password, ADMIN_SIFRE)
+    if not (kullanici_dogru and sifre_dogru):
+        raise HTTPException(
+            status_code=401,
+            detail="Geçersiz kullanıcı adı veya şifre",
+            headers={"WWW-Authenticate": "Basic"},
+        )
     return True
 
 
@@ -165,11 +197,20 @@ async def guvenlik_basliklari_ekle(request: Request, call_next):
     # söyler (downgrade saldırılarına karşı) -- yerel geliştirmede
     # (localhost, HTTP) tarayıcılar HSTS'yi zaten yok sayar, zararsız;
     # üretimde (HTTPS) faydalı. CSP: sayfanın SADECE kendi kaynağından
-    # (aynı origin) script/style/img yüklemesine izin verir -- özellikle
-    # /kullanim-sartlari ve /gizlilik-politikasi gibi HTML sayfaları için
-    # (dışarıdan enjekte edilebilecek script'lere karşı ek katman).
+    # (aynı origin) script yüklemesine izin verir -- özellikle
+    # /kullanim-sartlari, /gizlilik-politikasi ve /admin gibi HTML sayfaları
+    # için (dışarıdan enjekte edilebilecek script'lere karşı ek katman).
+    #
+    # 2026-08-19 DÜZELTMESİ (bulundu: /admin paneli test edilirken):
+    # 'default-src' tek başıken 'style-src' için de fallback oluyor, bu da
+    # bu üç sayfanın HEPSİNİN kendi <style> bloklarını (satır-içi CSS)
+    # SESSİZCE engelliyordu -- yani gizlilik/kullanım şartları sayfaları bu
+    # değişiklikten beri (18 Ağustos) hiç fark edilmeden STİLSİZ
+    # görünüyordu. 'style-src' ayrıca 'unsafe-inline' ile gevşetildi --
+    # bu SADECE CSS'e izin verir, script enjeksiyonuna karşı asıl koruma
+    # (script-src/default-src 'self') aynen korunuyor.
     yanit.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    yanit.headers["Content-Security-Policy"] = "default-src 'self'"
+    yanit.headers["Content-Security-Policy"] = "default-src 'self'; style-src 'self' 'unsafe-inline'"
     return yanit
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -494,6 +535,21 @@ def gizlilik_politikasi():
 def kullanim_sartlari_duz_metin():
     """Mobil uygulamanın açılış onay modalında göstermesi için düz metin."""
     return KULLANIM_SARTLARI_METIN
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def admin_paneli(_giris=Depends(admin_girisini_dogrula)):
+    """
+    2026-08-19: SADECE proje sahibi için, kullanım istatistiklerini gösteren
+    salt-okunur bir sayfa (bkz. admin_panel.py başındaki kapsam notu).
+    Mobil uygulamanın hiçbir özelliği bu uç noktaya bağımlı değil.
+    """
+    conn = veritabani_baglantisi(DB_FILE)
+    try:
+        metrikler = metrikleri_hesapla(conn, DB_FILE, _son_basarili_tarama_oku())
+    finally:
+        conn.close()
+    return admin_sayfa_html(metrikler)
 
 
 def _yerel_pdf_url_olustur(request: Request, row) -> Optional[str]:
