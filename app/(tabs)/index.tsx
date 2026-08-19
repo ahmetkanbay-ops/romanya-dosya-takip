@@ -541,6 +541,43 @@ export default function IndexScreen() {
                       <Text style={styles.cardDosyaNo}>Eşleşen numara: {item.dosya_no}</Text>
                     ) : null}
                     <Text style={styles.cardMessage}>{sonucMetniGetir(item)}</Text>
+                    {/* 2026-08-19 DÜZELTMESİ (kullanıcı fark etti): "ORDINE'de
+                        eşleşme yok ama STADIU'da mevcut" gibi sakin aşama-geçiş
+                        mesajlarında (asamaGecisMesajiGetir), item'ın KENDİSİ
+                        "bulunamadı" (eslesti=false) olduğu için aşağıdaki genel
+                        PDF blokları hiç render edilmiyordu -- kullanıcı GERÇEK
+                        eşleşmeyi (ör. stadiu'daki PDF'i) göremiyordu. Backend artık
+                        baska_kategoride_bulundu içinde TAM sonuç nesnesi (PDF
+                        linkleri dahil) döndürüyor -- burada o kaydın PDF'ini
+                        gösteriyoruz. */}
+                    {(() => {
+                      if (!asamaGecisMesajiGetir(item)) return null;
+                      const digerKayit = (item.baska_kategoride_bulundu || [])[0];
+                      if (!digerKayit) return null;
+                      return (
+                        <>
+                          {digerKayit.yerel_pdf_url ? (
+                            <>
+                              <TouchableOpacity
+                                style={styles.yerelPdfButon}
+                                onPress={() => Linking.openURL(digerKayit.yerel_pdf_url)}
+                              >
+                                <Text style={styles.yerelPdfMetin}>{t.yerelBelgeButon}</Text>
+                              </TouchableOpacity>
+                              <Text style={styles.yerelPdfAciklama}>{t.yerelBelgeAciklama}</Text>
+                            </>
+                          ) : null}
+                          {digerKayit.resmi_pdf_url ? (
+                            <TouchableOpacity
+                              style={styles.resmiLinkButon}
+                              onPress={() => Linking.openURL(digerKayit.resmi_pdf_url)}
+                            >
+                              <Text style={styles.resmiLinkMetin}>{t.resmiBelgeButon}</Text>
+                            </TouchableOpacity>
+                          ) : null}
+                        </>
+                      );
+                    })()}
                     {/* PDF butonları SADECE gerçek bir eşleşme varsa gösterilir --
                         "bulunamadı" sonucunda kırık/anlamsız bir bağlantı
                         gösterilmesin diye tip === 'bulunamadi' ise hiçbiri render edilmez. */}

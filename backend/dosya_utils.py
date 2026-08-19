@@ -13,6 +13,21 @@ import re
 import sqlite3
 import time
 import unicodedata
+from zoneinfo import ZoneInfo
+
+# 2026-08-19 DÜZELTMESİ (kullanıcı sordu: "16384 numaralı dosya neden
+# Render'da hâlâ yok" -- kök neden burasıydı): scheduler, mesai saati
+# kontrolü ve zaman damgaları eskiden `datetime.now()` (SUNUCUNUN yerel
+# saat dilimi) kullanıyordu. Kullanıcının kendi bilgisayarında bu Türkiye
+# saatiydi (kazara doğru), ama Render'ın konteynerleri VARSAYILAN olarak
+# UTC kullanıyor -- yani "09:00'da tara" komutu Render'da GERÇEKTE 12:00
+# Türkiye/Romanya saatinde (UTC+3, yaz saati) çalışıyordu, mesai saati
+# kontrolü de aynı şekilde kaymıştı. cetatenie.just.ro Romanya'da
+# barındığı için artık saat dilimi AÇIKÇA Romanya'ya (Europe/Bucharest)
+# sabitlendi -- sunucu nerede çalışırsa çalışsın (yerel bilgisayar,
+# Render, başka bir bulut) artık hep AYNI, doğru saatte tarama yapılır.
+# main.py, bot.py, admin_panel.py hepsi BURADAN import ediyor.
+ROMANYA_SAAT_DILIMI = ZoneInfo("Europe/Bucharest")
 
 # ---------------------------------------------------------------------------
 # KATEGORİ TANIMLARI (mobil uygulamadaki (app/(tabs)/index.tsx) listeyle
@@ -229,18 +244,25 @@ def ordine_dosya_kategorisi_uyusuyor_mu(dosya_adi, alt_kategori):
 
 _ILK_RAKAM_BLOGU = re.compile(r"\d+")
 
+# 2026-08-19 DÜZELTMESİ (kullanıcı fark etti): hane aralığı önceden 3-7
+# idi, bu yüzden 1-2 haneli dosya numaraları (ör. "7", "42") YANLIŞLIKLA
+# hiç eşleşmiyordu. Romanya vatandaşlık başvuru numaraları 1'den
+# başladığı için (kullanıcının belirttiği kural), aralık artık 1-9 hane.
+
 # Kalıp 1: "43484/RD/2023" gibi NUMARA/HARF KODU/YIL
 _TAM_DOSYA_NO_DESENI = re.compile(
-    r"(\d{3,7})\s*[\/\-]\s*([A-ZĂÂÎŞȘŢȚ]{1,5})\s*[\/\-]\s*(\d{4})"
+    r"(\d{1,9})\s*[\/\-]\s*([A-ZĂÂÎŞȘŢȚ]{1,5})\s*[\/\-]\s*(\d{4})"
 )
 
 # Kalıp 2: gerçek PDF'lerde görülen "(41289/2021)" gibi NUMARA/YIL
-_NUMARA_YIL_DESENI = re.compile(r"\(?\s*(\d{3,7})\s*\/\s*(\d{4})\s*\)?")
+_NUMARA_YIL_DESENI = re.compile(r"\(?\s*(\d{1,9})\s*\/\s*(\d{4})\s*\)?")
 
 # Yedek kalıp: yalnızca yukarıdaki yapılandırılmış kalıplardan HİÇBİRİ
 # bulunamazsa devreye girer (örn. Ordin/Anexa numarası gibi alakasız
-# sayıları dosya numarasıyla karıştırmamak için).
-_YALIN_SAYI_DESENI = re.compile(r"\b(\d{3,7})\b")
+# sayıları dosya numarasıyla karıştırmamak için). 1-2 haneli bare sayılar
+# genel metinde daha sık rastlansa da, bu kalıp SADECE yapılandırılmış
+# kalıpların hiç bulunamadığı belgelerde devreye giriyor -- risk düşük.
+_YALIN_SAYI_DESENI = re.compile(r"\b(\d{1,9})\b")
 
 
 def sayisal_cekirdek(deger):
@@ -277,7 +299,7 @@ def metinden_dosya_numaralarini_cikar(tum_metin):
     PDF metninden dosya numaralarını çıkarır, en güvenilirden en gevşeğe:
     1) 'NUMARA/HARF KODU/YIL'  (örn. 43484/RD/2023)
     2) 'NUMARA/YIL'            (örn. (41289/2021) — gerçek PDF'lerde görülen asıl format)
-    3) Yalın 3-7 haneli sayılar — SADECE yukarıdaki iki yapılandırılmış kalıptan
+    3) Yalın 1-9 haneli sayılar — SADECE yukarıdaki iki yapılandırılmış kalıptan
        hiçbiri belgede hiç bulunamadıysa devreye girer. Bu sayede "ORDIN NR. 1138"
        gibi belge/karar numaraları, yapılandırılmış liste bulunan belgelerde
        yanlışlıkla dosya numarası sanılmaz. 1900-2100 aralığındaki sayılar yıl

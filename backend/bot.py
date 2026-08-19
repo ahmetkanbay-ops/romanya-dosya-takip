@@ -84,6 +84,7 @@ from dosya_utils import (
     stadiu_dosya_kategorisi_uyusuyor_mu,
     ordine_dosya_kategorisi_uyusuyor_mu,
     sistem_olayi_kaydet,
+    ROMANYA_SAAT_DILIMI,
 )
 from bildirim import expo_push_gonder, admin_kritik_uyari
 
@@ -156,7 +157,7 @@ def _mesai_saatinde_mi():
     -- bu yüzden mesai dışı erişim sorunları "olağan dışı bir kesinti"
     sayılıp admin'e uyarı gönderilmez, sadece mesai saatleri içinde yaşanan
     kesintiler bildirilir (kullanıcının 2026-08-14 talebi)."""
-    return 8 <= datetime.now().hour <= 17
+    return 8 <= datetime.now(ROMANYA_SAAT_DILIMI).hour <= 17
 
 
 def _site_erisilebilir_mi(page, url, deneme_sayisi=2):
@@ -809,9 +810,18 @@ def botu_calistir():
     # gösterebilmek için, her tarama SONUNDA (başarılı biterse) zamanı
     # basit bir metin dosyasına yazıyoruz. main.py /api/durum bunu okuyup
     # mobil tarafa iletir (bkz. main.py, index.tsx).
+    #
+    # 2026-08-19 DÜZELTMESİ (kullanıcı sordu: "16384 numaralı dosya neden
+    # Render'da hâlâ yok" -- ikinci kök neden buradaydı): dosya eskiden
+    # BASE_DIR'e (kod klasörü) yazılıyordu -- Render'da BU KLASÖR KALICI
+    # DEĞİL, her `git push` sonrası deploy'da SIFIRDAN indiriliyor. Yani
+    # bot Render'da başarıyla tarasa bile, bir SONRAKİ deploy bu dosyayı
+    # SİLİYORDU -- /api/durum hep "son_guncelleme: null" gösteriyordu.
+    # Artık VERI_DIZINI'ne (DATA_DIR ayarlıysa kalıcı diske, yoksa yerelde
+    # eskisi gibi backend/ klasörüne) yazılıyor.
     try:
-        with open(os.path.join(BASE_DIR, "son_basarili_tarama.txt"), "w", encoding="utf-8") as f:
-            f.write(datetime.now().isoformat())
+        with open(os.path.join(VERI_DIZINI, "son_basarili_tarama.txt"), "w", encoding="utf-8") as f:
+            f.write(datetime.now(ROMANYA_SAAT_DILIMI).isoformat())
     except Exception as e:
         print(f"✗ Son tarama zamanı kaydedilemedi: {str(e)[:80]}")
 

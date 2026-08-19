@@ -67,6 +67,7 @@ from dosya_utils import (
     klasor_adi_guvenli,
     veritabani_baglantisi,
     guvenli_commit,
+    ROMANYA_SAAT_DILIMI,
 )
 from hukuki_metinler import (
     KULLANIM_SARTLARI_METIN,
@@ -254,7 +255,7 @@ os.makedirs(PDF_KOK_KLASOR, exist_ok=True)
 app.mount("/pdfs", StaticFiles(directory=PDF_KOK_KLASOR), name="pdfs")
 
 # Scheduler kurulumu
-scheduler = BackgroundScheduler()
+scheduler = BackgroundScheduler(timezone=ROMANYA_SAAT_DILIMI)
 
 
 def run_bot(yeniden_deneme_mi=False):
@@ -284,7 +285,7 @@ def run_bot(yeniden_deneme_mi=False):
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] BOT TAMAMLANDI")
 
         if not toplam_pdf_bulunan and not yeniden_deneme_mi:
-            calistirma_zamani = datetime.now() + timedelta(hours=6)
+            calistirma_zamani = datetime.now(ROMANYA_SAAT_DILIMI) + timedelta(hours=6)
             scheduler.add_job(
                 run_bot,
                 'date',
@@ -301,7 +302,7 @@ def run_bot(yeniden_deneme_mi=False):
         # yükseldi) de "site erişilemedi" ile aynı muameleyi görmeli --
         # aynı tek seferlik/günde-en-fazla-2-deneme kuralı burada da geçerli.
         if not yeniden_deneme_mi:
-            calistirma_zamani = datetime.now() + timedelta(hours=6)
+            calistirma_zamani = datetime.now(ROMANYA_SAAT_DILIMI) + timedelta(hours=6)
             scheduler.add_job(
                 run_bot,
                 'date',
@@ -449,7 +450,7 @@ def _mesai_saatinde_mi() -> bool:
     "olağan dışı bir kesinti" sayılıp ne admin'e ne de uygulama
     kullanıcılarına bildirilmez, sadece mesai saatleri içinde yaşanan
     kesintiler bildirilir (kullanıcının 2026-08-14 talebi)."""
-    return 8 <= datetime.now().hour <= 17
+    return 8 <= datetime.now(ROMANYA_SAAT_DILIMI).hour <= 17
 
 
 def _son_basarili_tarama_oku() -> Optional[str]:
@@ -461,7 +462,10 @@ def _son_basarili_tarama_oku() -> Optional[str]:
     (bot hiç çalışmadıysa) None döner, mobil taraf bu durumda ek metni
     hiç göstermez.
     """
-    yol = os.path.join(BASE_DIR, "son_basarili_tarama.txt")
+    # 2026-08-19 DÜZELTMESİ: bkz. bot.py'deki aynı isimli dosyanın notu --
+    # artık VERI_DIZINI'nden (Render'da kalıcı disk) okunuyor, BASE_DIR
+    # (kod klasörü, Render'da her deploy'da sıfırlanıyordu) değil.
+    yol = os.path.join(VERI_DIZINI, "son_basarili_tarama.txt")
     if not os.path.isfile(yol):
         return None
     try:
@@ -513,7 +517,13 @@ def site_durumu():
     if son_guncelleme:
         try:
             tarama_zamani = datetime.fromisoformat(son_guncelleme)
-            gecen_saat = (datetime.now() - tarama_zamani).total_seconds() / 3600
+            # bot.py artık saat dilimi BİLGİSİYLE (+03:00 gibi) yazıyor --
+            # eski yedeklerden kalma saat dilimsiz (naive) bir değer
+            # gelirse (ör. bu düzeltmeden önce yazılmış dosya), Romanya
+            # saatiymiş gibi kabul edip devam ediyoruz, çökmüyoruz.
+            if tarama_zamani.tzinfo is None:
+                tarama_zamani = tarama_zamani.replace(tzinfo=ROMANYA_SAAT_DILIMI)
+            gecen_saat = (datetime.now(ROMANYA_SAAT_DILIMI) - tarama_zamani).total_seconds() / 3600
             servis_disi = gecen_saat > SON_TARAMA_TAZELIK_ESIGI_SAAT
         except Exception:
             servis_disi = False  # bozuk/okunamayan zaman damgasında güvenli tarafta kal
@@ -746,60 +756,56 @@ def sorgula(veri: SorguIstegi, request: Request, _anahtar=Depends(app_anahtarini
     # gevşetilerek aynı numara tekrar aranıyor -- bulunursa gerçek
     # kategori(ler)/yıl(lar) "baska_kategoride_bulundu" alanında dönüyor.
     #
-    # 2026-08-16 -- 2. DÜZELTME (ilk düzeltme yetersiz kaldı, kullanıcı canlı
-    # testte tekrar yakaladı): "kategoriyi sabit tutup sadece yılı bırak"
-    # adımı, kullanıcı SADECE ana_kategori seçip (alt_kategori SEÇMEDİYSE --
-    # ör. "ordine'de var mı diye bakayım" gibi çok yaygın bir kullanım)
-    # aslında hâlâ GÜVENSİZDİ -- "ana_kategori=ordine, alt_kategori=YOK"
-    # kısıtı, binlerce farklı dosyayı kapsayan gevşek bir kısıt, "kategori
-    # zaten daraltılmış" varsayımı SADECE alt_kategori verilmişse doğruydu.
-    # Artık kural netleştirildi -- İKİ BAĞIMSIZ, birbirinden ayrı güvenli
-    # kısıtlayıcı var: (a) alt_kategori VERİLMİŞSE, onu sabit tutup yılı
-    # bırakmak güvenli (alt_kategori zaten dar bir liste). (b) yıl
-    # VERİLMİŞSE, onu sabit tutup TÜM kategoriyi bırakmak güvenli (aynı
-    # numara+yıl ikilisi neredeyse hep tek kişiye ait, doğrulandı: "469/2023"
-    # ve "307/RD/2017" testleri). Bu ikisi DIŞINDA (sadece ana_kategori
-    # verilmiş VEYA hiçbir şey verilmemişse) hiçbir öneri YAPILMIYOR --
-    # dürüstçe "bulunamadı" deniyor, çünkü ana_kategori tek başına numara
-    # çakışmasını engellemeye yetecek kadar dar bir kısıt değil.
+    # 2026-08-19 -- 3. DÜZELTME (kullanıcı canlı testte YİNE yakaladı, bu sefer
+    # gerçek veriyle kanıtlandı): eski (a) adımı ("alt_kategori sabit, yılı
+    # bırak") tamamen KALDIRILDI. Gerekçe: "16384" numarası test edilirken,
+    # AYNI alt_kategori (Ordine articolul 11) içinde 2019, 2020 VE 2021
+    # yıllarında birbirinden TAMAMEN BAĞIMSIZ, farklı kişilere ait dosyalar
+    # olduğu görüldü -- yani "alt_kategori zaten yeterince dar" varsayımı
+    # YANLIŞTI, tıpkı daha önce "sadece ana_kategori" için fark edildiği
+    # gibi. Kullanıcının kendi sözleriyle: "en ayırt edici özellik yıl" --
+    # yıl verilmeden yapılan hiçbir tahmin güvenli değil, başka bir yılda
+    # açıklanmış TAMAMEN ALAKASIZ bir dosyayı "belki bu" diye göstermek
+    # yanıltıcı ve kullanıcıyı gereksiz yere heyecanlandırabilir/yanlış
+    # bilgilendirebilir.
+    #
+    # Artık TEK bir güvenli kısıtlayıcı yol var: yıl VERİLMİŞSE, onu sabit
+    # tutup TÜM kategoriyi (ana+alt) bırakmak güvenli (aynı numara+yıl
+    # ikilisi neredeyse hep tek kişiye ait, doğrulandı: "469/2023" ve
+    # "307/RD/2017" testleri) -- bu, kullanıcının bildiği yılla ORDINE'de
+    # ararken aslında henüz sadece STADIU'da olduğu durumu da doğru şekilde
+    # yakalıyor (aynı numara+yıl, farklı ana_kategori). Yıl verilmemişse
+    # (ya da sadece ana_kategori/alt_kategori verilmişse) hiçbir öneri
+    # YAPILMIYOR -- dürüstçe "bulunamadı" deniyor.
     baska_kategoride_bulundu = []
-    alt_kategori_verildi = bool(veri.alt_kategori)
     verilen_yil = veri.yil and veri.yil.strip()
 
-    if alt_kategori_verildi or verilen_yil:
+    if verilen_yil:
         conn2 = veritabani_baglantisi(DB_FILE, row_factory=sqlite3.Row)
         cursor2 = conn2.cursor()
-        gevsek_rows = []
 
-        # (a) alt_kategori sabit, yıl bırakılıyor -- "kategori doğru,
-        # sadece yıl yanlış/eksik" durumu.
-        if alt_kategori_verildi:
-            gevsek_veri = SimpleNamespace(yil=None, ana_kategori=veri.ana_kategori, alt_kategori=veri.alt_kategori)
-            gevsek_rows = _sorguyu_calistir(cursor2, "dosya_no_norm", birincil_anahtar, gevsek_veri)
-            if not gevsek_rows and yedek_anahtar and yedek_anahtar != birincil_anahtar:
-                gevsek_rows = _sorguyu_calistir(cursor2, "dosya_no_tum_rakam", yedek_anahtar, gevsek_veri)
-
-        # (b) yıl sabit, TÜM kategori bırakılıyor -- "yıl doğru/biliniyor,
+        # yıl sabit, TÜM kategori bırakılıyor -- "yıl doğru/biliniyor,
         # kategori yanlış/bilinmiyor" durumu (ör. stadiu'dan bilinen yılla
         # ordine'de arama).
-        if not gevsek_rows and verilen_yil:
-            gevsek_veri = SimpleNamespace(yil=verilen_yil, ana_kategori=None, alt_kategori=None)
-            gevsek_rows = _sorguyu_calistir(cursor2, "dosya_no_norm", birincil_anahtar, gevsek_veri)
-            if not gevsek_rows and yedek_anahtar and yedek_anahtar != birincil_anahtar:
-                gevsek_rows = _sorguyu_calistir(cursor2, "dosya_no_tum_rakam", yedek_anahtar, gevsek_veri)
+        gevsek_veri = SimpleNamespace(yil=verilen_yil, ana_kategori=None, alt_kategori=None)
+        gevsek_rows = _sorguyu_calistir(cursor2, "dosya_no_norm", birincil_anahtar, gevsek_veri)
+        if not gevsek_rows and yedek_anahtar and yedek_anahtar != birincil_anahtar:
+            gevsek_rows = _sorguyu_calistir(cursor2, "dosya_no_tum_rakam", yedek_anahtar, gevsek_veri)
         conn2.close()
 
+        # 2026-08-19 DÜZELTMESİ (kullanıcı fark etti): burada eskiden sadece
+        # ana_kategori/alt_kategori/yıl döndürülüyordu -- kullanıcı "stadiu'da
+        # buldum" dediğimizde PDF'i de göstermemiz gerektiğini belirtti,
+        # haklı: kullanıcı bunu kendi gözüyle doğrulayabilmeli. Artık
+        # _satirdan_sonuc ile GERÇEK sonuçlarla AYNI tam yapı (durum, mesaj,
+        # resmi_pdf_url, yerel_pdf_url dahil) dönüyor.
         gorulen = set()
         for row in gevsek_rows:
             anahtar = (row["ana_kategori"], row["alt_kategori"], row["yil"])
             if anahtar in gorulen:
                 continue
             gorulen.add(anahtar)
-            baska_kategoride_bulundu.append({
-                "ana_kategori": row["ana_kategori"],
-                "alt_kategori": row["alt_kategori"],
-                "yil": row["yil"],
-            })
+            baska_kategoride_bulundu.append(_satirdan_sonuc(row, request))
 
     return {
         "dosya_no": ham_no,
