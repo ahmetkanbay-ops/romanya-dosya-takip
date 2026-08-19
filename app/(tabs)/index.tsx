@@ -12,6 +12,7 @@ import {
   Platform,
   Linking,
   Modal,
+  AppState,
 } from 'react-native';
 // ÖNEMLİ (2026-08-15 düzeltmesi): react-native'in KENDİ SafeAreaView'ı
 // SADECE iOS'ta güvenli alan boşluğu ekler -- Android'de hiçbir şey
@@ -133,21 +134,42 @@ export default function IndexScreen() {
   // gerekmez. Bu kontrol sessizce başarısız olabilir (ör. sunucuya hiç
   // ulaşılamıyorsa) -- ana sorgulama işlevini etkilemesin diye hata
   // durumunda banner basitçe gösterilmez.
+  //
+  // 2026-08-19 DÜZELTMESİ (kullanıcı fark etti): eskiden bu kontrol SADECE
+  // uygulama İLK AÇILDIĞINDA bir kez yapılıyordu -- site durumu uygulama
+  // AÇIK KALDIĞI sürede değişirse (ör. site az önce erişilemez hale
+  // geldiyse), banner hiç güncellenmiyordu, kullanıcı uygulamayı kapatıp
+  // yeniden açana kadar eski (yanlış) durumu görmeye devam ediyordu. Artık
+  // iki ek tetikleyici var: (1) her 3 dakikada bir otomatik yeniden kontrol,
+  // (2) uygulama arka plandan ön plana her döndüğünde (AppState) anında
+  // yeniden kontrol -- kullanıcı telefonunu kilitleyip açtığında ya da
+  // başka uygulamadan geri döndüğünde durum hep güncel olur.
   useEffect(() => {
     let iptal = false;
-    apiIstek('/api/durum')
-      .then((r) => r.json())
-      .then((veri) => {
-        if (!iptal) {
-          setServisDisiMi(Boolean(veri?.servis_disi));
-          setSonGuncelleme(typeof veri?.son_guncelleme === 'string' ? veri.son_guncelleme : null);
-        }
-      })
-      .catch(() => {
-        // Sessizce yok say -- bu sadece bilgilendirici bir banner.
-      });
+    const durumuKontrolEt = () => {
+      apiIstek('/api/durum')
+        .then((r) => r.json())
+        .then((veri) => {
+          if (!iptal) {
+            setServisDisiMi(Boolean(veri?.servis_disi));
+            setSonGuncelleme(typeof veri?.son_guncelleme === 'string' ? veri.son_guncelleme : null);
+          }
+        })
+        .catch(() => {
+          // Sessizce yok say -- bu sadece bilgilendirici bir banner.
+        });
+    };
+
+    durumuKontrolEt();
+    const araliqId = setInterval(durumuKontrolEt, 3 * 60 * 1000);
+    const appStateAboneligi = AppState.addEventListener('change', (yeniDurum) => {
+      if (yeniDurum === 'active') durumuKontrolEt();
+    });
+
     return () => {
       iptal = true;
+      clearInterval(araliqId);
+      appStateAboneligi.remove();
     };
   }, []);
 
