@@ -88,7 +88,11 @@ from dosya_utils import (
 from bildirim import expo_push_gonder, admin_kritik_uyari
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PDF_KOK_KLASOR = os.path.join(BASE_DIR, "pdfs")
+# 2026-08-19 (Render'a taşıma): bkz. main.py'deki aynı isimli sabitin notu --
+# DATA_DIR ayarlıysa kalıcı diskten, yoksa (yerel geliştirme) eskisi gibi
+# backend/ klasöründen okunur/yazılır.
+VERI_DIZINI = os.environ.get("DATA_DIR", BASE_DIR)
+PDF_KOK_KLASOR = os.path.join(VERI_DIZINI, "pdfs")
 
 # TEŞHİS MODU (2026-08-15 eklendi): bazı alt kategoriler (CONSULAT / ANC,
 # REZULTATE/INVITATII INTERVIU ART. 8 ve 8.1) sayfada hiç bulunamıyor --
@@ -97,7 +101,7 @@ PDF_KOK_KLASOR = os.path.join(BASE_DIR, "pdfs")
 # bulunamayan HER kategori için o anki sayfanın tam HTML'ini ve tam sayfa
 # ekran görüntüsünü buraya kaydediyoruz. Sadece yerel teşhis içindir,
 # sunucuya/git'e taşınmaz (bkz. .gitignore).
-TESHIS_KLASOR = os.path.join(BASE_DIR, "teshis")
+TESHIS_KLASOR = os.path.join(VERI_DIZINI, "teshis")
 
 # NOT: Bu iki adres, kullanıcının verdiği gerçek sayfalarla BİREBİR aynı
 # olmalı -- "stadiu-dosar" adresinde fazladan bir "/cetatenie/" segmenti

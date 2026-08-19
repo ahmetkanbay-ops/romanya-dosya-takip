@@ -28,8 +28,10 @@ from dosya_utils import (
 )
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_FILE = os.path.join(BASE_DIR, "dosyalar.db")
-PDF_KOK_KLASOR = os.path.join(BASE_DIR, "pdfs")
+# 2026-08-19 (Render'a taşıma): bkz. main.py'deki aynı isimli sabitin notu.
+VERI_DIZINI = os.environ.get("DATA_DIR", BASE_DIR)
+DB_FILE = os.path.join(VERI_DIZINI, "dosyalar.db")
+PDF_KOK_KLASOR = os.path.join(VERI_DIZINI, "pdfs")
 
 
 def tabloyu_olustur():

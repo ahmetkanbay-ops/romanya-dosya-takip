@@ -22,7 +22,9 @@ import requests
 from dosya_utils import veritabani_baglantisi, sistem_olayi_kaydet
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_FILE = os.path.join(BASE_DIR, "dosyalar.db")
+# 2026-08-19 (Render'a taşıma): bkz. main.py'deki aynı isimli sabitin notu.
+VERI_DIZINI = os.environ.get("DATA_DIR", BASE_DIR)
+DB_FILE = os.path.join(VERI_DIZINI, "dosyalar.db")
 
 
 def _olay_kaydet_sessizce(olay_tipi, detay=None):

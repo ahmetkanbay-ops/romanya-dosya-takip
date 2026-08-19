@@ -20,7 +20,9 @@ import time
 from datetime import datetime, timedelta
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PDF_KOK_KLASOR = os.path.join(BASE_DIR, "pdfs")
+# 2026-08-19 (Render'a taşıma): bkz. main.py'deki aynı isimli sabitin notu.
+VERI_DIZINI = os.environ.get("DATA_DIR", BASE_DIR)
+PDF_KOK_KLASOR = os.path.join(VERI_DIZINI, "pdfs")
 
 LACIVERT_KOYU = "#0f1a2e"
 LACIVERT = "#16233d"

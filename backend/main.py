@@ -214,8 +214,14 @@ async def guvenlik_basliklari_ekle(request: Request, call_next):
     return yanit
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_FILE = os.path.join(BASE_DIR, "dosyalar.db")
-PDF_KOK_KLASOR = os.path.join(BASE_DIR, "pdfs")
+# 2026-08-19 (Render'a taşıma): kalıcı disk bağlıysa (Render'da DATA_DIR=/data
+# ortam değişkeni ayarlanacak) veritabanı/PDF'ler/yedekler oradan okunur/
+# yazılır -- disk, her yeniden başlatmada/deploy'da SIFIRLANMAYAN tek yer.
+# Yerel geliştirmede DATA_DIR hiç ayarlanmadığı için davranış TAMAMEN AYNI
+# kalır (VERI_DIZINI = BASE_DIR, eskisi gibi backend/ klasörünün kendisi).
+VERI_DIZINI = os.environ.get("DATA_DIR", BASE_DIR)
+DB_FILE = os.path.join(VERI_DIZINI, "dosyalar.db")
+PDF_KOK_KLASOR = os.path.join(VERI_DIZINI, "pdfs")
 
 
 def init_db():
@@ -319,7 +325,7 @@ def run_bot(yeniden_deneme_mi=False):
 # SÜREÇTEN dosyayı elle kopyalamaktan (os.copy) çok daha güvenli, çünkü
 # ortasında yazma işlemi olsa bile SQLite bunu kendi içinde senkronize
 # ediyor (yarım/bozuk bir kopya riski yok).
-YEDEK_KLASOR = os.path.join(BASE_DIR, "yedekler")
+YEDEK_KLASOR = os.path.join(VERI_DIZINI, "yedekler")
 YEDEK_SAKLAMA_GUN_SAYISI = 7  # bundan eski yedekler otomatik silinir
 
 
