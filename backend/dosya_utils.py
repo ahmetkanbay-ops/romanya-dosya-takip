@@ -386,6 +386,18 @@ def veritabani_baglantisi(db_dosyasi, row_factory=None):
     return conn
 
 
+# 2026-08-19 (bütün bildirimleri Türkçe e-postaya bağlama): kritik_uyari
+# burada YOK -- o zaten bildirim.py'deki admin_kritik_uyari() içinde ayrı
+# olarak Telegram+e-posta ile gönderiliyor; burada da göndersek çift
+# e-posta olurdu. Diğer olay tipleri (tarama sonucu, push bildirimi) daha
+# önce sadece admin panelinde görünüyordu, artık ayrıca Türkçe özet
+# e-postasıyla da bildiriliyor.
+_OLAY_EPOSTA_BASLIKLARI = {
+    "tarama_tamamlandi": "📋 Romanya Dosya Takip - Tarama Tamamlandı",
+    "push_gonderildi": "📲 Romanya Dosya Takip - Bildirim Gönderildi",
+}
+
+
 def sistem_olayi_kaydet(conn, olay_tipi, detay=None):
     """
     2026-08-19 (admin istatistik paneli): işletimsel bir olayı (tarama
@@ -394,6 +406,12 @@ def sistem_olayi_kaydet(conn, olay_tipi, detay=None):
     İÇERMEMELİDİR -- sadece "ne zaman ne oldu" özeti. Kayıt başarısız
     olsa bile (ör. DB kilitli) ana işlemi ASLA durdurmaz, hatayı yutar --
     istatistik kaydı, uygulamanın çalışması için kritik değildir.
+
+    DB kaydından sonra, _OLAY_EPOSTA_BASLIKLARI'nda tanımlı olay tipleri
+    için ayrıca Türkçe bir özet e-postası da admin'e gönderilir (SMTP
+    ayarlanmamışsa bildirim.py.eposta_gonder zaten sessizce atlar). Bu
+    adım DB commit'inden SONRA, ayrı bir try/except içinde çalışır --
+    e-posta gönderimi başarısız olsa bile olay kaydı etkilenmez.
     """
     try:
         conn.execute(
@@ -403,6 +421,18 @@ def sistem_olayi_kaydet(conn, olay_tipi, detay=None):
         guvenli_commit(conn)
     except Exception as e:
         print(f"  ✗ sistem_olayi_kaydet başarısız ({olay_tipi}): {str(e)[:80]}")
+        return
+
+    konu = _OLAY_EPOSTA_BASLIKLARI.get(olay_tipi)
+    if konu:
+        try:
+            # Döngüsel import'tan kaçınmak için lazy import (bildirim.py
+            # zaten dosya_utils'ten import ediyor -- bkz. main.py'deki
+            # admin_kritik_uyari lazy import'u, aynı gerekçe).
+            from bildirim import eposta_gonder
+            eposta_gonder(konu, detay or "(detay yok)")
+        except Exception as e:
+            print(f"  ✗ Olay e-postası gönderilemedi ({olay_tipi}): {str(e)[:80]}")
 
 
 def pdf_zaten_islenmis_mi(conn, ana_kategori, alt_kategori, pdf_dosya):
