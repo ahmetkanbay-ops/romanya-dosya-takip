@@ -414,40 +414,76 @@ def botu_calistir():
                         continue
 
                     print(f"\n  → Kategori açılıyor: {alt_kategori}")
+                    url_tiklama_oncesi = page.url
                     eleman.click(timeout=15000)
-                    # 2026-08-15: sekme içerik paneli JS ile değiştiği için
-                    # (bkz. üstteki sekme arayüzü notu), 2sn -> 4sn'ye
-                    # çıkarıldı -- panelin ESKİ sekmenin içeriğini tamamen
-                    # bırakıp YENİ sekmenin içeriğine geçmesi için daha
-                    # fazla zaman tanıyor, bulaşma riskini azaltıyor.
-                    time.sleep(4)
 
-                    # 2026-08-15 -- GERÇEK KÖK NEDEN bulundu: sekmeler bir
-                    # Elementor "Advanced Tabs" (eael-advance-tabs) widget'ı
-                    # -- TIKLANMAYAN sekmelerin panelleri DOM'dan SİLİNMİYOR,
-                    # sadece "eael-tab-content-item inactive" class'ıyla
-                    # gizleniyor; aktif olan "...active" class'ını alıyor.
-                    # page.content() TÜM sayfayı (yani 11 kategorinin
-                    # TAMAMININ pdf linklerini) döndürüyordu -- bu yüzden her
-                    # kategori aynı devasa/duplicate listeyi alıyordu (bkz.
-                    # teshis/ARTICOLUL8_TIKLAMA_SONRASI.html ile doğrulandı:
-                    # tüm sayfa 165 pdf linki, aktif panel sadece 17). Artık
-                    # SADECE aktif panelin içeriğini parse ediyoruz.
-                    content = page.content()
-                    soup = BeautifulSoup(content, 'html.parser')
-                    aktif_panel = soup.find(
-                        'div',
-                        class_=lambda c: c and 'eael-tab-content-item' in c.split() and 'active' in c.split(),
-                    )
-                    if aktif_panel is not None:
-                        kaynak = aktif_panel
-                    else:
-                        # Beklenmedik bir DOM değişikliği olursa tüm sayfaya
-                        # düşüyoruz (eski davranış) -- aşağıdaki dosya adı
-                        # bazlı doğrulama (stadiu_/ordine_dosya_kategorisi_
-                        # uyusuyor_mu) yine de son bir güvenlik ağı sağlıyor.
-                        print("  ⚠ Aktif sekme paneli DOM'da bulunamadı, tüm sayfaya düşülüyor.")
+                    # 2026-08-19 -- CANLI TESTLE DOĞRULANAN YENİ KÖK NEDEN
+                    # ("Ordine minori ara sıra panel bulunamıyor" teşhisinin
+                    # güncellenmiş hâli): site ORDINE tarafını tamamen yeniden
+                    # yapılandırmış -- artık tek sayfada JS sekmesi DEĞİL, her
+                    # kategorinin KENDİ AYRI KALICI SAYFASI var (tıklama gerçek
+                    # navigasyon yapıyor: "Ordine minori" → /ordine-minori/,
+                    # "Ordine articolul 8" → /ordine-articolul-8/, vb. -- 5/5
+                    # test edilen ordine kategorisinde doğrulandı). STADIU
+                    # tarafı hâlâ eski aynı-sayfa-sekme yapısında (ARTICOLUL 11
+                    # ile doğrulandı). Bu yüzden önce GERÇEK navigasyon olup
+                    # olmadığına bakıyoruz -- URL değiştiyse artık aktif panel
+                    # aramanın hiç anlamı yok (o class hiç var olmayacak,
+                    # aramak sadece zaman aşımına kadar boşuna beklemek olur):
+                    # sayfanın TAMAMI zaten sadece bu kategoriye ait.
+                    try:
+                        page.wait_for_load_state("domcontentloaded", timeout=8000)
+                    except Exception:
+                        pass
+                    gercek_navigasyon_oldu = (page.url != url_tiklama_oncesi)
+
+                    if gercek_navigasyon_oldu:
+                        time.sleep(1)  # JS ile sonradan eklenen içerik için kısa bir pay
+                        content = page.content()
+                        soup = BeautifulSoup(content, 'html.parser')
                         kaynak = soup
+                    else:
+                        # Eski (hâlâ stadiu'da geçerli) davranış: aynı sayfada
+                        # JS sekmesi -- "ara sıra panel bulunamıyor" kök
+                        # nedeni burada sabit 4sn bekleyip content() almaktı;
+                        # Elementor'ın "active" class'ı geçmesi site yavaş
+                        # yanıt verdiğinde bunu bazen aşıyordu. Sabit süre
+                        # yerine, class GERÇEKTEN DOM'a işlenene kadar (en
+                        # fazla 12sn) aktif olarak bekliyoruz.
+                        try:
+                            page.wait_for_selector(
+                                "div.eael-tab-content-item.active", timeout=12000
+                            )
+                        except Exception:
+                            pass  # zaman aşımına uğrarsa aşağıdaki eski güvenlik ağı devreye girer
+
+                        # 2026-08-15 -- kök neden: sekmeler bir Elementor
+                        # "Advanced Tabs" (eael-advance-tabs) widget'ı --
+                        # TIKLANMAYAN sekmelerin panelleri DOM'dan SİLİNMİYOR,
+                        # sadece "eael-tab-content-item inactive" class'ıyla
+                        # gizleniyor; aktif olan "...active" class'ını alıyor.
+                        # page.content() TÜM sayfayı döndürüyordu -- bu yüzden
+                        # her kategori aynı devasa/duplicate listeyi alıyordu
+                        # (bkz. teshis/ARTICOLUL8_TIKLAMA_SONRASI.html: tüm
+                        # sayfa 165 pdf linki, aktif panel sadece 17). Artık
+                        # SADECE aktif panelin içeriğini parse ediyoruz.
+                        content = page.content()
+                        soup = BeautifulSoup(content, 'html.parser')
+                        aktif_panel = soup.find(
+                            'div',
+                            class_=lambda c: c and 'eael-tab-content-item' in c.split() and 'active' in c.split(),
+                        )
+                        if aktif_panel is not None:
+                            kaynak = aktif_panel
+                        else:
+                            # Beklenmedik bir DOM değişikliği olursa tüm
+                            # sayfaya düşüyoruz (eski davranış) -- aşağıdaki
+                            # dosya adı bazlı doğrulama son bir güvenlik ağı
+                            # sağlıyor. Artık bu GERÇEKTEN nadir/beklenmedik
+                            # bir durum olduğu için teşhis kaydı da alınıyor.
+                            print("  ⚠ Aktif sekme paneli DOM'da bulunamadı, tüm sayfaya düşülüyor.")
+                            _teshis_kaydet(page, f"{tip}_PANEL_AKTIF_OLMADI", alt_kategori, url)
+                            kaynak = soup
                     links = kaynak.find_all('a', href=True)
 
                     pdf_links = []
