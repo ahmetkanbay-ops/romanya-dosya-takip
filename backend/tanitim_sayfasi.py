@@ -108,7 +108,16 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
   .kapsayici {{ max-width: 1040px; margin: 0 auto; padding: 0 20px; }}
 
   header {{ text-align: center; padding: 56px 20px 40px; }}
-  .bayrak {{ font-size: 40px; }}
+  /* 2026-08-20 DÜZELTMESİ (kullanıcı Windows'ta fark etti): 🇷🇴 bayrak
+     emojisi Windows'ta çoğu tarayıcıda düzgün render edilmiyor, sadece
+     "RO" harfleri görünüyor. Uygulamanın kendisinde ZATEN emoji değil,
+     elle çizilmiş 3 renkli bant kullanılıyor (bkz. components/flag-mark.tsx)
+     -- aynısı burada da, platform/font bağımsız garanti çalışsın diye. */
+  .bayrak {{
+    display: flex; width: 52px; height: 36px; margin: 0 auto;
+    border-radius: 8px; overflow: hidden; border: 2px solid var(--altin);
+  }}
+  .bayrak span {{ flex: 1; }}
   h1 {{ font-size: clamp(28px, 5vw, 44px); margin: 8px 0 6px; }}
   .slogan {{ color: var(--gri); font-size: 17px; max-width: 560px; margin: 0 auto 28px; }}
 
@@ -210,7 +219,7 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
 <body>
 
 <header>
-  <div class="bayrak">🇷🇴</div>
+  <div class="bayrak"><span style="background:#002B7F"></span><span style="background:#FCD116"></span><span style="background:#CE1126"></span></div>
   <h1>Romanya Dosya Takip</h1>
   <p class="slogan">Romanya vatandaşlığı başvurunuzun Stadiu Dosar ve Ordine durumunu saniyeler içinde sorgulayın -- onaylandığında otomatik bildirim alın.</p>
   {magaza_html}
