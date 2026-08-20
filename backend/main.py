@@ -79,6 +79,7 @@ from hukuki_metinler import (
     sayfa_html,
 )
 from admin_panel import metrikleri_hesapla, admin_sayfa_html
+from tanitim_sayfasi import tanitim_sayfasi_html
 
 RESMI_LISTE_URL = "https://cetatenie.just.ro/"
 
@@ -279,6 +280,15 @@ init_db()
 # hale gelirse) bu karar yeniden değerlendirilebilir.
 os.makedirs(PDF_KOK_KLASOR, exist_ok=True)
 app.mount("/pdfs", StaticFiles(directory=PDF_KOK_KLASOR), name="pdfs")
+
+# 2026-08-20 (tanıtım web sayfası): ekran görüntüleri gibi sabit, koda
+# gömülü (kullanıcı verisi İÇERMEYEN) statik varlıklar için ayrı bir
+# klasör -- PDF_KOK_KLASOR'dan (kullanıcı verisiyle dolu, DATA_DIR'e
+# taşınan) BİLEREK ayrı tutuluyor, bu klasör git'e commit'lenip normal
+# kod gibi deploy ediliyor.
+_STATIK_KLASOR = os.path.join(BASE_DIR, "statik")
+if os.path.isdir(_STATIK_KLASOR):
+    app.mount("/statik", StaticFiles(directory=_STATIK_KLASOR), name="statik")
 
 # Scheduler kurulumu
 scheduler = BackgroundScheduler(timezone=ROMANYA_SAAT_DILIMI)
@@ -505,9 +515,27 @@ class SorguIstegi(BaseModel):
     cihaz_kimligi: Optional[str] = Field(default=None, max_length=200)
 
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 def root():
-    return {"status": "ok", "message": "Gerçek Veri Modülü Aktif"}
+    """
+    2026-08-20 (kullanıcı isteği): önceden burada sadece boş bir sağlık
+    kontrolü JSON'u vardı, hiçbir işe yaramıyordu. Artık gerçek bir tanıtım
+    (landing) sayfası -- Instagram'da paylaşılabilir, Play Console'un
+    "web sitesi" alanına girilebilir. Mobil uygulamanın kullandığı sağlık
+    kontrolü BAŞKA bir adreste (/api/durum), bu değişiklik ona dokunmuyor.
+
+    Rakamlar varsa (genel istatistik önbelleği zaten hesaplanmışsa)
+    gösterilir -- yoksa (ör. sunucu daha yeni başladıysa) o bölüm sessizce
+    atlanır, sayfa yine de tam çalışır (her istekte DB'ye gitmeden).
+    """
+    onbellek = _genel_istatistik_onbellek.get("veri")
+    if onbellek:
+        return tanitim_sayfasi_html(
+            toplam_stadiu=onbellek["toplam_stadiu"],
+            toplam_onay=onbellek["toplam_onaylanan"],
+            toplam_bekleyen=onbellek["toplam_bekleyen"],
+        )
+    return tanitim_sayfasi_html()
 
 
 def _mesai_saatinde_mi() -> bool:
