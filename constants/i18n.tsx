@@ -62,14 +62,10 @@ const CEVIRILER = {
     kategoriUyariMetin: 'Dosya numaranız sistemde {kategori} kategorisinde mevcut. Lütfen belirtilen kategoriyi tercih ederek tekrar sorgulama yapınız.',
     kategoriUyariUygula: 'Bu kategoriyle tekrar sorgula',
     kategoriUyariTamam: 'Tamam',
-    // Mesai saatleri içinde resmi site erişilemez durumdaysa ana ekranda
-    // gösterilen banner metni (bkz. backend /api/durum uç noktası).
-    siteServisDisiBanner: 'cetatenie.just.ro resmi web sayfası şuanda servis dışıdır.',
-    // 2026-08-15: kullanıcı isteğiyle eklendi -- yukarıdaki uyarı kaygı
-    // verici durabiliyor, bu ek metin verilerin taze kaldığını hatırlatıp
-    // ferahlık veriyor. "{tarih}" yer tutucusu index.tsx'te gerçek tarihle
-    // değiştiriliyor.
-    siteServisDisiEkAciklama: 'Sorgulamanız en son {tarih} tarihinde güncellenen veritabanından gerçekleştirilecektir.',
+    // 2026-08-21 KALDIRILDI (kullanıcı kararı): "servis dışı" banner'ı ve
+    // bu iki metin (siteServisDisiBanner/siteServisDisiEkAciklama) ana
+    // ekrandan tamamen kaldırıldı -- kullanıcılar bu mesajı görünce
+    // uygulamanın kendisinin bozuk olduğunu sanabilirdi.
     // Kategoriye göre sonuç mesajı ve durum rozeti (backend'in durum
     // alanından bağımsız, dile göre burada belirleniyor).
     // 2026-08-16 (kullanıcı isteği): "işlemde" mesajı artık kullanıcıyı bir
@@ -238,8 +234,6 @@ Sorularınız için: ahmet.knby.25@gmail.com`,
     kategoriUyariMetin: 'Your file number exists in the system under {kategori}. Please select that category and search again.',
     kategoriUyariUygula: 'Search again with this category',
     kategoriUyariTamam: 'OK',
-    siteServisDisiBanner: 'The official cetatenie.just.ro website is currently down.',
-    siteServisDisiEkAciklama: 'Your search will run against our database, last updated on {tarih}.',
     sonucMesaji: {
       stadiu: 'Your citizenship application file has been accepted into the system as Stage 1. To track the approval status (Stage 2) of your application, you can search again by selecting the ORDINE category.',
       ordine: 'Congratulations! Your citizenship application has been approved.',
@@ -383,8 +377,6 @@ For questions: ahmet.knby.25@gmail.com`,
     kategoriUyariMetin: 'Numărul dvs. de dosar există în sistem la categoria {kategori}. Vă rugăm selectați categoria respectivă și căutați din nou.',
     kategoriUyariUygula: 'Caută din nou cu această categorie',
     kategoriUyariTamam: 'OK',
-    siteServisDisiBanner: 'Site-ul oficial cetatenie.just.ro este momentan indisponibil.',
-    siteServisDisiEkAciklama: 'Căutarea dvs. va folosi baza noastră de date, actualizată ultima dată la {tarih}.',
     sonucMesaji: {
       stadiu: 'Dosarul cererii dvs. de cetățenie a fost acceptat în sistem ca Etapa 1. Pentru a urmări starea de aprobare (Etapa 2) a cererii dvs., puteți căuta din nou selectând categoria ORDINE.',
       ordine: 'Felicitări! Cererea dumneavoastră de cetățenie a fost aprobată.',

@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -12,7 +12,6 @@ import {
   Platform,
   Linking,
   Modal,
-  AppState,
 } from 'react-native';
 // ÖNEMLİ (2026-08-15 düzeltmesi): react-native'in KENDİ SafeAreaView'ı
 // SADECE iOS'ta güvenli alan boşluğu ekler -- Android'de hiçbir şey
@@ -58,20 +57,6 @@ function durumTipiGetir(item: any): DurumTipi {
   return 'bulunamadi';
 }
 
-// 2026-08-15: "servis dışı" banner'ı kaygı verici durabildiği için, backend
-// /api/durum'un döndürdüğü son başarılı tarama zaman damgasını okunaklı bir
-// Türkçe tarihe çeviriyoruz -- "verileriniz en son X'te güncellendi" ek
-// metni için (bkz. banner JSX'i). Ham ISO metni ayrıştırılamazsa null
-// döner, bu durumda ek metin hiç gösterilmez.
-function sonGuncellemeMetniOlustur(isoTarih: string | null): string | null {
-  if (!isoTarih) return null;
-  const tarih = new Date(isoTarih);
-  if (isNaN(tarih.getTime())) return null;
-  const gun = tarih.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
-  const saat = tarih.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-  return `${gun}, ${saat}`;
-}
-
 const DURUM_IKONU: Record<DurumTipi, string> = {
   onay: '✅',
   islemde: '⏳',
@@ -94,8 +79,6 @@ export default function IndexScreen() {
   const [sovGoster, setSovGoster] = useState(false);
   const [sonuclar, setSonuclar] = useState<any[] | null>(null);
   const [hata, setHata] = useState('');
-  const [servisDisiMi, setServisDisiMi] = useState(false);
-  const [sonGuncelleme, setSonGuncelleme] = useState<string | null>(null);
   const [konfetiGoster, setKonfetiGoster] = useState(false);
   const [konfetiAnahtari, setKonfetiAnahtari] = useState(0);
   // 2026-08-18 EKLENTİSİ (kullanıcı isteği: "kullanıcılar uygulamanın
@@ -127,51 +110,13 @@ export default function IndexScreen() {
   const aktifAltKategoriler = anaKategori === 'stadiu' ? STADIU_ALT_KATEGORILERI :
                              anaKategori === 'ordine' ? ORDINE_ALT_KATEGORILERI : [];
 
-  // Ana ekran açıldığında resmi kaynağın anlık erişilebilirliğini kontrol
-  // eder (bkz. backend /api/durum). Sadece mesai saatleri içindeki gerçek
-  // kesintilerde banner gösterilir -- mesai dışı olası bakım kesintileri
-  // için backend zaten "servis_disi: false" döndürür, burada ek bir kontrol
-  // gerekmez. Bu kontrol sessizce başarısız olabilir (ör. sunucuya hiç
-  // ulaşılamıyorsa) -- ana sorgulama işlevini etkilemesin diye hata
-  // durumunda banner basitçe gösterilmez.
-  //
-  // 2026-08-19 DÜZELTMESİ (kullanıcı fark etti): eskiden bu kontrol SADECE
-  // uygulama İLK AÇILDIĞINDA bir kez yapılıyordu -- site durumu uygulama
-  // AÇIK KALDIĞI sürede değişirse (ör. site az önce erişilemez hale
-  // geldiyse), banner hiç güncellenmiyordu, kullanıcı uygulamayı kapatıp
-  // yeniden açana kadar eski (yanlış) durumu görmeye devam ediyordu. Artık
-  // iki ek tetikleyici var: (1) her 3 dakikada bir otomatik yeniden kontrol,
-  // (2) uygulama arka plandan ön plana her döndüğünde (AppState) anında
-  // yeniden kontrol -- kullanıcı telefonunu kilitleyip açtığında ya da
-  // başka uygulamadan geri döndüğünde durum hep güncel olur.
-  useEffect(() => {
-    let iptal = false;
-    const durumuKontrolEt = () => {
-      apiIstek('/api/durum')
-        .then((r) => r.json())
-        .then((veri) => {
-          if (!iptal) {
-            setServisDisiMi(Boolean(veri?.servis_disi));
-            setSonGuncelleme(typeof veri?.son_guncelleme === 'string' ? veri.son_guncelleme : null);
-          }
-        })
-        .catch(() => {
-          // Sessizce yok say -- bu sadece bilgilendirici bir banner.
-        });
-    };
-
-    durumuKontrolEt();
-    const araliqId = setInterval(durumuKontrolEt, 3 * 60 * 1000);
-    const appStateAboneligi = AppState.addEventListener('change', (yeniDurum) => {
-      if (yeniDurum === 'active') durumuKontrolEt();
-    });
-
-    return () => {
-      iptal = true;
-      clearInterval(araliqId);
-      appStateAboneligi.remove();
-    };
-  }, []);
+  // 2026-08-21 KALDIRILDI (kullanıcı kararı): burada "servis dışı" banner'ı
+  // için /api/durum'u periyodik yoklayan bir useEffect vardı. Kullanıcı,
+  // kullanıcıların bu mesajı görünce uygulamanın kendisinin bozuk olduğunu
+  // sanabileceğini, sistemin zaten her gün veri çekip en güncel bilgiyi
+  // sunacağını belirterek bu özelliği tamamen kaldırmaya karar verdi --
+  // bkz. backend'deki /api/durum ucu hâlâ duruyor (zararsız, başka bir
+  // yerde kullanılmıyor), sadece bu ekrandaki gösterimi kaldırıldı.
 
   // `override` -- kategori uyarısı modalındaki "Bu kategoriyle sorgula"
   // butonu için: state güncellemeleri (setAnaKategori/setAltKategori) React
@@ -437,21 +382,6 @@ export default function IndexScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          {servisDisiMi && (
-            <View style={styles.servisDisiBanner}>
-              <Text style={styles.servisDisiMetin}>⚠️ {t.siteServisDisiBanner}</Text>
-              {/* 2026-08-15: kullanıcı isteğiyle eklendi -- yukarıdaki uyarı
-                  tek başına kaygı verici durabiliyor, verilerin taze
-                  kaldığını hatırlatan bu ek satır ferahlık veriyor. Son
-                  tarama zamanı bilinmiyorsa (henüz hiç çalışmadıysa) bu
-                  satır hiç gösterilmez. */}
-              {sonGuncellemeMetniOlustur(sonGuncelleme) && (
-                <Text style={styles.servisDisiEkMetin}>
-                  {t.siteServisDisiEkAciklama.replace('{tarih}', sonGuncellemeMetniOlustur(sonGuncelleme) ?? '')}
-                </Text>
-              )}
-            </View>
-          )}
           {/* Dosya Numarası */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>{t.dosyaNoEtiket}</Text>
@@ -785,17 +715,6 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   bilgiButonuMetin: { color: '#fff', fontSize: 17, fontWeight: 'bold' },
-  servisDisiBanner: {
-    backgroundColor: '#FBE9E7',
-    borderWidth: 1,
-    borderColor: '#E4536B',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-    marginTop: -6,
-  },
-  servisDisiMetin: { color: '#8a1f2d', fontSize: 12.5, fontWeight: '600', lineHeight: 18 },
-  servisDisiEkMetin: { color: '#8a1f2d', fontSize: 11.5, marginTop: 6, lineHeight: 16, opacity: 0.85 },
   inputGroup: { marginBottom: 15 },
   label: { fontSize: 14, fontWeight: '600', color: BEYAZ, marginBottom: 5 },
   input: {
