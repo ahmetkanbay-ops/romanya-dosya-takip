@@ -24,7 +24,7 @@ import sqlite3
 import time
 import requests
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from types import SimpleNamespace
 from urllib.parse import quote
@@ -365,10 +365,72 @@ def run_bot(yeniden_deneme_mi=False):
 YEDEK_KLASOR = os.path.join(VERI_DIZINI, "yedekler")
 YEDEK_SAKLAMA_GUN_SAYISI = 7  # bundan eski yedekler otomatik silinir
 
+# ---------------------------------------------------------------------------
+# BULUT YEDEKLEME (Backblaze B2) -- 2026-08-22
+# ---------------------------------------------------------------------------
+# Yukarıdaki yerel yedek Render'ın AYNI diskinde duruyor -- disk tamamen
+# kaybolursa/bozulursa yedek de gider. B2, veriyi Render'dan TAMAMEN bağımsız,
+# ayrı bir sağlayıcının sunucusunda tutarak gerçek "felaket kurtarma"
+# (disaster recovery) katmanı ekliyor. S3-uyumlu API'si olduğu için (boto3
+# ile) entegre edildi. B2_* ortam değişkenlerinden biri bile eksikse (ör.
+# yerel geliştirmede) bu adım sessizce atlanır -- yerel yedekleme hiç
+# etkilenmez, tıpkı SENTRY_DSN deseninde olduğu gibi.
+B2_KEY_ID = os.environ.get("B2_KEY_ID")
+B2_APPLICATION_KEY = os.environ.get("B2_APPLICATION_KEY")
+B2_BUCKET_ADI = os.environ.get("B2_BUCKET_ADI")
+B2_ENDPOINT = os.environ.get("B2_ENDPOINT")  # ör. https://s3.us-west-004.backblazeb2.com
+B2_SAKLAMA_GUN_SAYISI = 30  # bulutta yerelden daha uzun tutuyoruz -- ucuz, felaket senaryosu için
+
+
+def b2_yedegini_yukle(yerel_dosya_yolu):
+    """Yerel bir yedek dosyasını Backblaze B2'ye yükler, B2_SAKLAMA_GUN_SAYISI'ndan
+    eski bulut yedeklerini siler. B2_* ortam değişkenleri ayarlı değilse
+    sessizce atlanır -- yerel yedekleme bundan etkilenmez. Dönüş değeri
+    sadece /api/yedek-dogrulama-testi'nin sonucu HTTP yanıtında
+    gösterebilmesi için var, normal gece akışı bunu kullanmıyor."""
+    if not (B2_KEY_ID and B2_APPLICATION_KEY and B2_BUCKET_ADI and B2_ENDPOINT):
+        return {"durum": "atlandi", "sebep": "B2_* ortam değişkenleri ayarlı değil"}
+    try:
+        import boto3
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=B2_ENDPOINT,
+            aws_access_key_id=B2_KEY_ID,
+            aws_secret_access_key=B2_APPLICATION_KEY,
+        )
+        dosya_adi = os.path.basename(yerel_dosya_yolu)
+        anahtar = f"veritabani-yedekleri/{dosya_adi}"
+        s3.upload_file(yerel_dosya_yolu, B2_BUCKET_ADI, anahtar)
+        print(f"✓ Bulut (B2) yedeği yüklendi: {anahtar}")
+
+        silinen = []
+        sinir_zamani = datetime.now(timezone.utc) - timedelta(days=B2_SAKLAMA_GUN_SAYISI)
+        sayfalayici = s3.get_paginator("list_objects_v2")
+        for sayfa in sayfalayici.paginate(Bucket=B2_BUCKET_ADI, Prefix="veritabani-yedekleri/"):
+            for nesne in sayfa.get("Contents", []):
+                if nesne["LastModified"] < sinir_zamani:
+                    s3.delete_object(Bucket=B2_BUCKET_ADI, Key=nesne["Key"])
+                    silinen.append(nesne["Key"])
+                    print(f"  (eski bulut yedeği silindi: {nesne['Key']})")
+        return {"durum": "basarili", "anahtar": anahtar, "silinen_eski_yedekler": silinen}
+    except ImportError:
+        print("⚠️  B2_* ayarlı ama boto3 paketi kurulu değil -- bulut yedekleme devre dışı.")
+        return {"durum": "atlandi", "sebep": "boto3 kurulu değil"}
+    except Exception as e:
+        print(f"✗ Bulut (B2) yedekleme hatası: {e}")
+        try:
+            from bildirim import admin_kritik_uyari
+            admin_kritik_uyari(f"Bulut (B2) yedeği yüklenemedi: {e}")
+        except Exception:
+            pass
+        return {"durum": "hata", "mesaj": str(e)}
+
 
 def veritabani_yedekle():
     """dosyalar.db'nin tutarlı bir kopyasını yedekler/ klasörüne alır,
-    YEDEK_SAKLAMA_GUN_SAYISI'ndan eski yedekleri siler."""
+    YEDEK_SAKLAMA_GUN_SAYISI'ndan eski yedekleri siler. Dönüş değeri
+    b2_yedegini_yukle()'nin sonucu (varsa) -- normal gece zamanlayıcısı
+    bunu kullanmıyor, sadece /api/yedek-dogrulama-testi okuyor."""
     try:
         os.makedirs(YEDEK_KLASOR, exist_ok=True)
         zaman_damgasi = datetime.now().strftime("%Y-%m-%d_%H-%M")
@@ -384,6 +446,11 @@ def veritabani_yedekle():
         boyut_mb = os.path.getsize(hedef_yol) / (1024 * 1024)
         print(f"✓ Veritabanı yedeği alındı: {hedef_yol} ({boyut_mb:.1f} MB)")
 
+        # 2026-08-22: Yerel yedek Render'ın AYNI diskinde -- disk tamamen
+        # kaybolursa/bozulursa bu da giderdi. Ayrıca, Render'dan bağımsız,
+        # bulutta ikinci bir kopya dene (B2_* ayarlı değilse sessizce atlanır).
+        b2_sonucu = b2_yedegini_yukle(hedef_yol)
+
         # Eski yedekleri temizle (sadece son YEDEK_SAKLAMA_GUN_SAYISI günü tut).
         sinir_zamani = time.time() - (YEDEK_SAKLAMA_GUN_SAYISI * 24 * 60 * 60)
         for dosya_adi in os.listdir(YEDEK_KLASOR):
@@ -393,6 +460,7 @@ def veritabani_yedekle():
             if os.path.getmtime(tam_yol) < sinir_zamani:
                 os.remove(tam_yol)
                 print(f"  (eski yedek silindi: {dosya_adi})")
+        return b2_sonucu
     except Exception as e:
         print(f"✗ Veritabanı yedekleme hatası: {e}")
         try:
@@ -645,6 +713,17 @@ def gizlilik_politikasi():
 def kullanim_sartlari_duz_metin():
     """Mobil uygulamanın açılış onay modalında göstermesi için düz metin."""
     return KULLANIM_SARTLARI_METIN
+
+
+@app.get("/api/yedek-dogrulama-testi")
+def yedek_dogrulama_testi(_giris=Depends(admin_girisini_dogrula)):
+    """2026-08-22: B2 bulut yedeklemesinin GERÇEKTEN çalıştığını Render'da
+    (yerelde ağ engeli olduğu için orada test edilemedi) doğrulamak için
+    TEK SEFERLİK, geçici bir uç nokta. Gerçek veritabani_yedekle() akışını
+    tetikler (yerel yedek + varsa B2 yükleme). Doğrulama tamamlanınca bu
+    fonksiyon ve route kaldırılacak."""
+    b2_sonucu = veritabani_yedekle()
+    return {"tamam": True, "b2_sonucu": b2_sonucu}
 
 
 @app.get("/admin", response_class=HTMLResponse)

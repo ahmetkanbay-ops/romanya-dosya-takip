@@ -38,3 +38,9 @@ curl_cffi==0.16.0
 # değilse main.py sentry_sdk.init()'i hiç çağırmıyor -- yani bu paket
 # kuruluysa da DSN yoksa devre dışı kalır, hiçbir yan etkisi olmaz.
 sentry-sdk[fastapi]==2.68.0
+
+# 2026-08-22: Bulut yedekleme (Backblaze B2). B2'nin S3-uyumlu API'sine
+# bağlanmak için kullanılıyor -- B2_* ortam değişkenleri ayarlı değilse
+# main.py b2_yedegini_yukle()'yi hiç çağırmıyor, bu paket kuruluysa da
+# devre dışı kalır (SENTRY_DSN ile aynı desen).
+boto3==1.43.78
