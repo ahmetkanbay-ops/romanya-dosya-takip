@@ -216,6 +216,25 @@ def bugunun_durumunu_getir(son_basarili_tarama, son_tarama_detay):
     return sonuc
 
 
+def bugunun_durumu_html_getir(conn, son_basarili_tarama):
+    """2026-08-22: /admin sayfasının kendisi ARTIK bunu çağırmıyor -- 4 dış
+    servise (Render/Sentry/B2/GitHub) atılan canlı istekler onlarca saniye
+    sürebiliyor (Render'ın bu bölgeden bazı servislere erişimi yavaş
+    kalabiliyor), bu da TÜM admin panelini bloke ediyordu. Artık sayfa
+    ANINDA açılıyor, bu fonksiyon ayrı bir uç noktadan (/api/admin/
+    bugunun-durumu) sayfa yüklendikten SONRA, tarayıcıdan JS ile çağrılıyor
+    -- kullanıcı bekleme hissetmiyor, veri geldiğinde yerine oturuyor."""
+    c = conn.cursor()
+    c.execute(
+        "SELECT detay FROM sistem_olaylari WHERE olay_tipi='tarama_tamamlandi' "
+        "ORDER BY zaman DESC LIMIT 1"
+    )
+    satir = c.fetchone()
+    son_tarama_detay = satir[0] if satir else None
+    durumlar = bugunun_durumunu_getir(son_basarili_tarama, son_tarama_detay)
+    return _bugunun_durumu_html(durumlar)
+
+
 def _boyutu_okunabilir_yap(byte_sayisi):
     for birim in ["B", "KB", "MB", "GB", "TB"]:
         if byte_sayisi < 1024:
@@ -361,7 +380,6 @@ def metrikleri_hesapla(conn, db_dosyasi, son_basarili_tarama):
 
     return {
         "olusturma_zamani": simdi.strftime("%d.%m.%Y %H:%M"),
-        "bugunun_durumu": bugunun_durumunu_getir(son_basarili_tarama, son_tarama_detay),
         "kullanicilar": {
             "toplam_cihaz": toplam_cihaz,
             "yeni_bugun": yeni_cihaz["bugun"],
@@ -551,8 +569,27 @@ def admin_sayfa_html(m):
 
   <div class="bolum">
     <p class="bolum-baslik">Bugünün Durumu</p>
-    {_bugunun_durumu_html(m['bugunun_durumu'])}
+    <div id="bugunun-durumu-icerik">
+      <div class="durum-satir" style="border-left-color:#9aa3b2">
+        <span class="durum-ikon">⏳</span>
+        <span class="durum-ad">Yükleniyor…</span>
+        <span class="durum-mesaj">Render, Sentry, Backblaze ve GitHub kontrol ediliyor (birkaç saniye sürebilir)</span>
+      </div>
+    </div>
   </div>
+  <script>
+    // 2026-08-22: Sayfanın kendisi ANINDA açılsın diye, dış servis
+    // kontrolleri sayfa yüklendikten SONRA, ayrı bir istekle çekiliyor.
+    // Basic Auth kimlik bilgisi tarayıcı tarafından bu adrese otomatik
+    // ekleniyor (aynı köken/realm, /admin sayfası zaten doğrulanmıştı).
+    fetch('/api/admin/bugunun-durumu')
+      .then(r => r.ok ? r.text() : Promise.reject(r.status))
+      .then(html => {{ document.getElementById('bugunun-durumu-icerik').innerHTML = html; }})
+      .catch(() => {{
+        document.getElementById('bugunun-durumu-icerik').innerHTML =
+          '<p class="bos">Durum bilgisi alınamadı, sayfayı yenileyin.</p>';
+      }});
+  </script>
 
   <div class="bolum">
     <p class="bolum-baslik">Kullanıcılar</p>

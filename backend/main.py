@@ -78,7 +78,7 @@ from hukuki_metinler import (
     GIZLILIK_POLITIKASI_METIN,
     sayfa_html,
 )
-from admin_panel import metrikleri_hesapla, admin_sayfa_html
+from admin_panel import metrikleri_hesapla, admin_sayfa_html, bugunun_durumu_html_getir
 from tanitim_sayfasi import tanitim_sayfasi_html
 
 RESMI_LISTE_URL = "https://cetatenie.just.ro/"
@@ -705,6 +705,20 @@ def admin_paneli(_giris=Depends(admin_girisini_dogrula)):
     finally:
         conn.close()
     return admin_sayfa_html(metrikler)
+
+
+@app.get("/api/admin/bugunun-durumu", response_class=HTMLResponse)
+def admin_bugunun_durumu(_giris=Depends(admin_girisini_dogrula)):
+    """2026-08-22: /admin sayfasının ayrı, ASENKRON yüklenen parçası --
+    bkz. bugunun_durumu_html_getir() içindeki gerekçe notu. Bu uç, sayfanın
+    kendisi tamamen açıldıktan SONRA tarayıcıdan JS ile çağrılıyor, bu
+    yüzden Render/Sentry/B2/GitHub'a atılan canlı isteklerin (onlarca
+    saniye sürebiliyor) tüm sayfayı bloke etmesi artık mümkün değil."""
+    conn = veritabani_baglantisi(DB_FILE)
+    try:
+        return bugunun_durumu_html_getir(conn, _son_basarili_tarama_oku())
+    finally:
+        conn.close()
 
 
 def _yerel_pdf_url_olustur(request: Request, row) -> Optional[str]:
