@@ -647,6 +647,16 @@ def kullanim_sartlari_duz_metin():
     return KULLANIM_SARTLARI_METIN
 
 
+@app.get("/api/sentry-dogrulama-testi")
+def sentry_dogrulama_testi(_giris=Depends(admin_girisini_dogrula)):
+    """2026-08-22: Sentry entegrasyonunun GERÇEKTEN çalıştığını canlıda
+    doğrulamak için TEK SEFERLİK, geçici bir uç nokta. Admin şifresiyle
+    korunuyor (kimse dışarıdan tetikleyemez). Doğrulama tamamlanınca bu
+    fonksiyon ve route kaldırılacak -- kalıcı bir özellik değil."""
+    1 / 0  # kasıtlı hata -- Sentry'ye gitmesi gereken test olayı
+    return {"asla_buraya_ulasmaz": True}
+
+
 @app.get("/admin", response_class=HTMLResponse)
 def admin_paneli(_giris=Depends(admin_girisini_dogrula)):
     """
