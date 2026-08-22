@@ -303,9 +303,13 @@ def metrikleri_hesapla(conn, db_dosyasi, son_basarili_tarama):
     aynı desen). Admin paneli haftada bir bakılan bir sayfa -- 5 dakikalık
     bayatlık kabul edilebilir bir bedel, 30-45 saniyelik bekleme değil."""
     onbellek = _metrikler_onbellek
+    print(f"[TEŞHİS] metrikleri_hesapla çağrıldı, onbellek id={id(onbellek)}, veri_var_mi={onbellek['veri'] is not None}, yas_sn={time.time() - onbellek['zaman']:.1f}")
     if onbellek["veri"] is not None and (time.time() - onbellek["zaman"]) < _METRIK_ONBELLEK_SURESI_SN:
+        print("[TEŞHİS] -> ÖNBELLEKTEN döndü")
         return onbellek["veri"]
+    t0 = time.time()
     sonuc = _metrikleri_hesapla_ham(conn, db_dosyasi, son_basarili_tarama)
+    print(f"[TEŞHİS] -> TAZE hesaplandı, sürdü: {time.time() - t0:.1f}sn")
     onbellek["veri"] = sonuc
     onbellek["zaman"] = time.time()
     return sonuc
