@@ -287,7 +287,31 @@ def _disk_kullanimini_hesapla(db_dosyasi):
     return sonuc
 
 
+_metrikler_onbellek = {"veri": None, "zaman": 0.0}
+_METRIK_ONBELLEK_SURESI_SN = 300  # 5 dakika
+
+
 def metrikleri_hesapla(conn, db_dosyasi, son_basarili_tarama):
+    """metrikleri_hesapla()'nın ÖNBELLEKLİ dış yüzü -- 2026-08-22: canlıda
+    ölçüldü, `dosyalar` tablosundaki (~1,3 milyon satır) COUNT/GROUP BY
+    sorguları Render'ın kalıcı diskinde (ağ üzerinden bağlı depolama,
+    yerel SSD'den çok daha yüksek gecikmeli) TEK BAŞINA 30-45 saniye
+    sürebiliyor -- disk boyutu zaten ayrı önbelleğe alınıyordu (aşağıdaki
+    _disk_kullanimini_hesapla) ama asıl maliyet SQL sorgularıymış, hiç
+    önbelleklenmiyordu. Gerçek hesap _metrikleri_hesapla_ham()'a taşındı,
+    burada sadece 5 dakikalık bir önbellek katmanı var (diğer önbelleklerle
+    aynı desen). Admin paneli haftada bir bakılan bir sayfa -- 5 dakikalık
+    bayatlık kabul edilebilir bir bedel, 30-45 saniyelik bekleme değil."""
+    onbellek = _metrikler_onbellek
+    if onbellek["veri"] is not None and (time.time() - onbellek["zaman"]) < _METRIK_ONBELLEK_SURESI_SN:
+        return onbellek["veri"]
+    sonuc = _metrikleri_hesapla_ham(conn, db_dosyasi, son_basarili_tarama)
+    onbellek["veri"] = sonuc
+    onbellek["zaman"] = time.time()
+    return sonuc
+
+
+def _metrikleri_hesapla_ham(conn, db_dosyasi, son_basarili_tarama):
     """Tüm admin paneli metriklerini tek bir sözlükte toplar. `conn`,
     main.py'nin zaten kullandığı row_factory=sqlite3.Row bağlantısıdır."""
     c = conn.cursor()
