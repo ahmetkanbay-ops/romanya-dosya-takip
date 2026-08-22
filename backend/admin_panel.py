@@ -18,8 +18,11 @@ import html
 import os
 import shutil
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+
+import requests
 
 from dosya_utils import ROMANYA_SAAT_DILIMI
 
@@ -47,6 +50,170 @@ ALTIN = "#e3a83b"
 # önbellek (main.py'deki _genel_istatistik_onbellek ile aynı desen).
 _disk_boyutu_onbellek = {"veri": None, "zaman": 0.0}
 _ONBELLEK_SURESI_SN = 600
+
+# ---------------------------------------------------------------------------
+# "BUGÜNÜN DURUMU" -- 2026-08-22, kullanıcının isteğiyle eklendi
+# ---------------------------------------------------------------------------
+# Kullanıcı, Render/Sentry/GitHub/Backblaze panelleri arasında tek tek
+# gezmek yerine hepsinin GÜNLÜK durumunu TEK pencerede görmek istedi.
+# Buradaki 4 fonksiyon, ilgili servise KENDİ API'si üzerinden anlık bir
+# sorgu atıp tek satırlık bir özet döndürüyor. Her biri kendi ortam
+# değişkenlerine bakıyor -- biri eksikse (ör. yerel geliştirmede) o servis
+# sessizce "yok" durumuna düşer, panelin geri kalanını bozmaz (SENTRY_DSN
+# ile aynı desen). Ağ çağrıları paralel (ThreadPoolExecutor) çalıştırılıyor
+# ki 4 servisin toplam bekleme süresi, en yavaş TEKİNİNKİ kadar olsun
+# (art arda 4x8sn değil). Sonuç 5 dakika önbelleğe alınıyor -- panel art
+# arda birkaç kez yenilense bile dış servislere gereksiz yük binmesin diye
+# (yukarıdaki disk boyutu önbelleğiyle aynı desen).
+RENDER_API_ANAHTARI = os.environ.get("RENDER_API_ANAHTARI")
+RENDER_SERVIS_ID = os.environ.get("RENDER_SERVIS_ID")
+SENTRY_AUTH_TOKEN = os.environ.get("SENTRY_AUTH_TOKEN")
+SENTRY_ORG_SLUG = os.environ.get("SENTRY_ORG_SLUG")
+SENTRY_PROJECT_SLUG = os.environ.get("SENTRY_PROJECT_SLUG")
+GITHUB_REPO = "ahmetkanbay-ops/romanya-dosya-takip"  # herkese açık repo, anahtar gerekmiyor
+
+_dis_servis_onbellek = {"veri": None, "zaman": 0.0}
+_DIS_SERVIS_ONBELLEK_SURESI_SN = 300  # 5 dakika
+_AG_ZAMAN_ASIMI_SN = 6
+
+
+def _render_durumu_getir():
+    if not (RENDER_API_ANAHTARI and RENDER_SERVIS_ID):
+        return {"ikon": "🖥️", "ad": "Render (sunucu)", "durum": "yok", "mesaj": "API anahtarı ayarlı değil"}
+    try:
+        yanit = requests.get(
+            f"https://api.render.com/v1/services/{RENDER_SERVIS_ID}/deploys?limit=1",
+            headers={"Authorization": f"Bearer {RENDER_API_ANAHTARI}"},
+            timeout=_AG_ZAMAN_ASIMI_SN,
+        )
+        yanit.raise_for_status()
+        deploy = yanit.json()[0]["deploy"]
+        basarili = deploy.get("status") == "live"
+        commit_kisa = deploy.get("commit", {}).get("id", "")[:7]
+        return {
+            "ikon": "🖥️", "ad": "Render (sunucu)",
+            "durum": "iyi" if basarili else "uyari",
+            "mesaj": f"Ayakta, son deploy: {deploy.get('status')} ({commit_kisa})" if basarili
+                     else f"Son deploy durumu: {deploy.get('status')} ({commit_kisa})",
+        }
+    except Exception as e:
+        return {"ikon": "🖥️", "ad": "Render (sunucu)", "durum": "hata", "mesaj": f"Kontrol edilemedi: {e}"}
+
+
+def _sentry_durumu_getir():
+    if not (SENTRY_AUTH_TOKEN and SENTRY_ORG_SLUG and SENTRY_PROJECT_SLUG):
+        return {"ikon": "🐞", "ad": "Sentry (hatalar)", "durum": "yok", "mesaj": "API anahtarı ayarlı değil"}
+    try:
+        yanit = requests.get(
+            f"https://sentry.io/api/0/projects/{SENTRY_ORG_SLUG}/{SENTRY_PROJECT_SLUG}/issues/",
+            headers={"Authorization": f"Bearer {SENTRY_AUTH_TOKEN}"},
+            params={"statsPeriod": "24h", "query": "is:unresolved"},
+            timeout=_AG_ZAMAN_ASIMI_SN,
+        )
+        yanit.raise_for_status()
+        sayi = len(yanit.json())
+        return {
+            "ikon": "🐞", "ad": "Sentry (hatalar)",
+            "durum": "iyi" if sayi == 0 else "uyari",
+            "mesaj": "Son 24 saatte yeni hata yok" if sayi == 0 else f"Son 24 saatte {sayi} yeni/açık hata",
+        }
+    except Exception as e:
+        return {"ikon": "🐞", "ad": "Sentry (hatalar)", "durum": "hata", "mesaj": f"Kontrol edilemedi: {e}"}
+
+
+def _github_durumu_getir():
+    try:
+        esik = (datetime.now(_UTC) - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        yanit = requests.get(
+            f"https://api.github.com/repos/{GITHUB_REPO}/commits",
+            params={"since": esik},
+            timeout=_AG_ZAMAN_ASIMI_SN,
+        )
+        yanit.raise_for_status()
+        sayi = len(yanit.json())
+        return {
+            "ikon": "💻", "ad": "GitHub",
+            "durum": "iyi",
+            "mesaj": f"Son 24 saatte {sayi} commit" if sayi else "Son 24 saatte commit yok",
+        }
+    except Exception as e:
+        return {"ikon": "💻", "ad": "GitHub", "durum": "hata", "mesaj": f"Kontrol edilemedi: {e}"}
+
+
+def _b2_durumu_getir():
+    b2_key_id = os.environ.get("B2_KEY_ID")
+    b2_anahtar = os.environ.get("B2_APPLICATION_KEY")
+    b2_bucket = os.environ.get("B2_BUCKET_ADI")
+    b2_endpoint = os.environ.get("B2_ENDPOINT")
+    if not (b2_key_id and b2_anahtar and b2_bucket and b2_endpoint):
+        return {"ikon": "☁️", "ad": "Backblaze (yedek)", "durum": "yok", "mesaj": "B2 ayarlı değil"}
+    try:
+        import boto3
+        from botocore.config import Config
+        # boto3'ün VARSAYILAN zaman aşımı çok uzun (bağlantı için ~60sn) --
+        # B2 herhangi bir sebeple yavaş/erişilemez olursa bu, TÜM admin
+        # panelini dakikalarca kilitleyebilirdi (yerel testte tam bunu
+        # yaşadık -- bkz. 2026-08-22 B2 entegrasyonu sırasındaki ağ engeli
+        # notu). Diğer 3 servisle (requests, timeout=6sn) tutarlı olsun diye.
+        s3 = boto3.client(
+            "s3", endpoint_url=b2_endpoint,
+            aws_access_key_id=b2_key_id, aws_secret_access_key=b2_anahtar,
+            config=Config(connect_timeout=_AG_ZAMAN_ASIMI_SN, read_timeout=_AG_ZAMAN_ASIMI_SN, retries={"max_attempts": 1}),
+        )
+        yanit = s3.list_objects_v2(Bucket=b2_bucket, Prefix="veritabani-yedekleri/")
+        nesneler = yanit.get("Contents", [])
+        if not nesneler:
+            return {"ikon": "☁️", "ad": "Backblaze (yedek)", "durum": "uyari", "mesaj": "Hiç yedek bulunamadı"}
+        en_yeni = max(nesneler, key=lambda n: n["LastModified"])
+        yas_saat = (datetime.now(_UTC) - en_yeni["LastModified"]).total_seconds() / 3600
+        boyut_mb = en_yeni["Size"] / (1024 * 1024)
+        if yas_saat <= 30:  # gece 03:00 yedeklemesi + cömert pay (main.py'deki SON_TARAMA_TAZELIK_ESIGI_SAAT ile aynı mantık)
+            return {"ikon": "☁️", "ad": "Backblaze (yedek)", "durum": "iyi",
+                     "mesaj": f"Son yedek {yas_saat:.0f} saat önce, {boyut_mb:.1f} MB"}
+        return {"ikon": "☁️", "ad": "Backblaze (yedek)", "durum": "uyari",
+                 "mesaj": f"Son yedek {yas_saat:.0f} saat önce -- beklenenden eski"}
+    except Exception as e:
+        return {"ikon": "☁️", "ad": "Backblaze (yedek)", "durum": "hata", "mesaj": f"Kontrol edilemedi: {e}"}
+
+
+def _bot_taramasi_durumu(son_basarili_tarama, son_tarama_detay):
+    if not son_basarili_tarama:
+        return {"ikon": "🤖", "ad": "Günlük Tarama", "durum": "uyari", "mesaj": "Hiç tarama kaydı yok"}
+    try:
+        ayristirilan = datetime.fromisoformat(son_basarili_tarama)
+        if ayristirilan.tzinfo is not None:
+            # Yeni kayıtlar saat dilimi bilgisiyle yazılıyor (bot.py).
+            ayristirilan = ayristirilan.astimezone(ROMANYA_SAAT_DILIMI)
+        else:
+            # Eski kayıt, saat dilimsiz -- zaten Romanya yerel saatiyle yazılmıştı.
+            ayristirilan = ayristirilan.replace(tzinfo=ROMANYA_SAAT_DILIMI)
+        yas_saat = (datetime.now(ROMANYA_SAAT_DILIMI) - ayristirilan).total_seconds() / 3600
+    except Exception:
+        yas_saat = 999
+    detay = f" — {son_tarama_detay}" if son_tarama_detay else ""
+    if yas_saat <= 30:
+        return {"ikon": "🤖", "ad": "Günlük Tarama", "durum": "iyi", "mesaj": f"{yas_saat:.0f} saat önce çalıştı{detay}"}
+    return {"ikon": "🤖", "ad": "Günlük Tarama", "durum": "uyari", "mesaj": f"{yas_saat:.0f} saattir çalışmadı{detay}"}
+
+
+def bugunun_durumunu_getir(son_basarili_tarama, son_tarama_detay):
+    """4 dış servisi PARALEL sorgulayıp + bot'un kendi tarama durumunu
+    birlikte tek bir liste olarak döndürür. 5 dakika önbelleğe alınır."""
+    onbellek = _dis_servis_onbellek
+    if onbellek["veri"] is not None and (time.time() - onbellek["zaman"]) < _DIS_SERVIS_ONBELLEK_SURESI_SN:
+        return onbellek["veri"]
+
+    bot_durumu = _bot_taramasi_durumu(son_basarili_tarama, son_tarama_detay)
+    with ThreadPoolExecutor(max_workers=4) as havuz:
+        sonuclar = list(havuz.map(
+            lambda fn: fn(),
+            [_render_durumu_getir, _sentry_durumu_getir, _b2_durumu_getir, _github_durumu_getir],
+        ))
+
+    sonuc = [bot_durumu] + sonuclar
+    onbellek["veri"] = sonuc
+    onbellek["zaman"] = time.time()
+    return sonuc
 
 
 def _boyutu_okunabilir_yap(byte_sayisi):
@@ -194,6 +361,7 @@ def metrikleri_hesapla(conn, db_dosyasi, son_basarili_tarama):
 
     return {
         "olusturma_zamani": simdi.strftime("%d.%m.%Y %H:%M"),
+        "bugunun_durumu": bugunun_durumunu_getir(son_basarili_tarama, son_tarama_detay),
         "kullanicilar": {
             "toplam_cihaz": toplam_cihaz,
             "yeni_bugun": yeni_cihaz["bugun"],
@@ -247,6 +415,24 @@ def _olay_satirlari_html(olaylar, bos_mesaj):
             f'<span class="olay-detay">{_e(detay)}</span></li>'
         )
     return f'<ul class="olay-listesi">{"".join(satirlar)}</ul>'
+
+
+_DURUM_RENGI = {"iyi": "#2e9e5b", "uyari": "#e3a83b", "hata": "#d9534f", "yok": "#9aa3b2"}
+_DURUM_SIMGESI = {"iyi": "✅", "uyari": "⚠️", "hata": "❌", "yok": "⚪"}
+
+
+def _bugunun_durumu_html(durumlar):
+    satirlar = []
+    for d in durumlar:
+        renk = _DURUM_RENGI.get(d["durum"], "#9aa3b2")
+        simge = _DURUM_SIMGESI.get(d["durum"], "⚪")
+        satirlar.append(f"""
+        <div class="durum-satir" style="border-left-color:{renk}">
+          <span class="durum-ikon">{d['ikon']}</span>
+          <span class="durum-ad">{_e(d['ad'])}</span>
+          <span class="durum-mesaj">{simge} {_e(d['mesaj'])}</span>
+        </div>""")
+    return "".join(satirlar)
 
 
 def admin_sayfa_html(m):
@@ -344,6 +530,15 @@ def admin_sayfa_html(m):
   .donusum-cubuk-zemin {{ height: 8px; background: var(--kenar); border-radius: 5px; overflow: hidden; margin-top: 8px; }}
   .donusum-cubuk-dolu {{ height: 100%; background: linear-gradient(90deg, var(--altin), #f0c069); }}
 
+  .durum-satir {{
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    background: var(--yuzey); border: 1px solid var(--kenar); border-left: 4px solid #9aa3b2;
+    border-radius: 8px; margin-bottom: 8px; font-size: 13.5px; flex-wrap: wrap;
+  }}
+  .durum-ikon {{ font-size: 16px; }}
+  .durum-ad {{ font-weight: 700; color: var(--lacivert-koyu); min-width: 150px; }}
+  .durum-mesaj {{ color: var(--metin-ikincil); }}
+
   footer.altbilgi {{ text-align: center; font-size: 11.5px; color: var(--metin-ikincil); margin-top: 30px; }}
 </style>
 </head>
@@ -353,6 +548,11 @@ def admin_sayfa_html(m):
     <h1>📊 Admin Paneli</h1>
     <span class="zaman">Oluşturulma: {m['olusturma_zamani']}</span>
   </header>
+
+  <div class="bolum">
+    <p class="bolum-baslik">Bugünün Durumu</p>
+    {_bugunun_durumu_html(m['bugunun_durumu'])}
+  </div>
 
   <div class="bolum">
     <p class="bolum-baslik">Kullanıcılar</p>
