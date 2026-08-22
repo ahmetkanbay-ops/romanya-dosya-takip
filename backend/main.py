@@ -715,17 +715,6 @@ def kullanim_sartlari_duz_metin():
     return KULLANIM_SARTLARI_METIN
 
 
-@app.get("/api/yedek-dogrulama-testi")
-def yedek_dogrulama_testi(_giris=Depends(admin_girisini_dogrula)):
-    """2026-08-22: B2 bulut yedeklemesinin GERÇEKTEN çalıştığını Render'da
-    (yerelde ağ engeli olduğu için orada test edilemedi) doğrulamak için
-    TEK SEFERLİK, geçici bir uç nokta. Gerçek veritabani_yedekle() akışını
-    tetikler (yerel yedek + varsa B2 yükleme). Doğrulama tamamlanınca bu
-    fonksiyon ve route kaldırılacak."""
-    b2_sonucu = veritabani_yedekle()
-    return {"tamam": True, "b2_sonucu": b2_sonucu}
-
-
 @app.get("/admin", response_class=HTMLResponse)
 def admin_paneli(_giris=Depends(admin_girisini_dogrula)):
     """
