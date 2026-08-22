@@ -297,58 +297,35 @@ scheduler = BackgroundScheduler(timezone=ROMANYA_SAAT_DILIMI)
 def run_bot(yeniden_deneme_mi=False):
     """Bot'u çalıştır.
 
-    2026-08-17 EKLENTİSİ -- TEK SEFERLİK yeniden deneme: Site birkaç gün
-    üst üste erişilemez olursa (daha önce yaşandı), eskiden bot bir
-    sonraki günün 09:00'ına kadar hiç tekrar denemiyordu. Artık: günün
-    ilk (09:00) çalışması sitenin TAMAMEN erişilemez olması yüzünden HİÇ
-    PDF bulamazsa (botu_calistir'in dönüş değerine bakılıyor), 6 saat
-    sonra (yaklaşık 15:00) TEK bir ek deneme otomatik zamanlanıyor.
+    2026-08-22 KARARI: Günde SADECE 1 kez, 09:00'da çalışır -- PDF
+    bulsun ya da bulmasın, aynı gün içinde tekrar denenmez. Eskiden
+    (2026-08-17 - 2026-08-22 arası) site o gün hiç PDF bulunamazsa 6 saat
+    sonra (~15:00) tek bir ek deneme daha yapılıyordu; kullanıcı bunun
+    siteyi gereksiz yere ikinci kez yorduğunu düşünüp kaldırılmasını
+    istedi -- haklı: başvuru süreçleri ay/yıl mertebesinde olduğu için,
+    site öğleden sonra kendiliğinden düzelse bile yeni PDF'leri bir gün
+    geç (ertesi 09:00'da) yakalamanın gerçek kullanıcıya hiçbir zararı
+    yok, sitenin üzerindeki yükü en aza indirmek daha değerli. Site günde
+    5 kez (2 saatte bir) taramayı kötüye kullanım sayıp IP'yi bloke
+    etmişti (bkz. 2026-08-15 notu) -- bu prensip ışığında artık günde
+    tam olarak 1 istek atılıyor.
 
-    KASITLI SINIRLAMA: bu yeniden deneme kendi kendine BİR DAHA yeniden
-    deneme ZAMANLAMAZ (yeniden_deneme_mi=True ise bu adım atlanır) --
-    yani günde EN FAZLA 2 deneme (09:00 + 15:00) yapılabilir. Bunun
-    nedeni: cetatenie.just.ro, günde 5 kez (2 saatte bir) yapılan
-    taramayı kötüye kullanım sayıp IP'yi bloke etmişti (bkz. 2026-08-15
-    notu) -- sınırsız/sık yeniden deneme aynı riski yeniden yaratır.
+    yeniden_deneme_mi parametresi geriye dönük uyumluluk için duruyor
+    (artık hiçbir yerden True ile çağrılmıyor, yeniden deneme
+    zamanlanmıyor) -- ileride tekrar istenirse buraya eklenebilir.
     """
     try:
         from bot import botu_calistir
-        etiket = "YENİDEN DENEME (bugünkü ilk deneme site erişilemez bulmuştu)" if yeniden_deneme_mi else "OTOMATİK ÇALIŞTIRILDI"
         print(f"\n{'='*60}")
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] BOT {etiket}")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] BOT OTOMATİK ÇALIŞTIRILDI")
         print(f"{'='*60}")
         toplam_pdf_bulunan = botu_calistir()
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] BOT TAMAMLANDI")
 
-        if not toplam_pdf_bulunan and not yeniden_deneme_mi:
-            calistirma_zamani = datetime.now(ROMANYA_SAAT_DILIMI) + timedelta(hours=6)
-            scheduler.add_job(
-                run_bot,
-                'date',
-                run_date=calistirma_zamani,
-                args=[True],
-                id='pdf_downloader_yeniden_deneme',
-                name='PDF Downloader Bot (yeniden deneme)',
-                replace_existing=True,
-            )
-            print(f"  ℹ Site erişilemedi -- {calistirma_zamani.strftime('%H:%M')}'de TEK seferlik bir yeniden deneme zamanlandı.")
+        if not toplam_pdf_bulunan:
+            print("  ℹ Site erişilemedi ya da hiç yeni PDF bulunamadı -- bir sonraki deneme yarın 09:00'da.")
     except Exception as e:
         print(f"✗ Bot çalıştırma hatası: {e}")
-        # Beklenmedik bir çökme (ör. ağ zaman aşımı istisna olarak
-        # yükseldi) de "site erişilemedi" ile aynı muameleyi görmeli --
-        # aynı tek seferlik/günde-en-fazla-2-deneme kuralı burada da geçerli.
-        if not yeniden_deneme_mi:
-            calistirma_zamani = datetime.now(ROMANYA_SAAT_DILIMI) + timedelta(hours=6)
-            scheduler.add_job(
-                run_bot,
-                'date',
-                run_date=calistirma_zamani,
-                args=[True],
-                id='pdf_downloader_yeniden_deneme',
-                name='PDF Downloader Bot (yeniden deneme)',
-                replace_existing=True,
-            )
-            print(f"  ℹ Çökme sonrası -- {calistirma_zamani.strftime('%H:%M')}'de TEK seferlik bir yeniden deneme zamanlandı.")
 
 
 # ---------------------------------------------------------------------------
@@ -638,10 +615,10 @@ def _son_basarili_tarama_oku() -> Optional[str]:
 
 
 
-# Bot'un günlük taraması (09:00, başarısız olursa 6 saat sonra tek seferlik
-# yeniden deneme -- bkz. run_bot notu) normal koşullarda 15:00'e kadar en az
-# bir kez başarıyla biter. Bu eşik, o güvenli aralığa cömert bir pay ekliyor
-# (tatil/hafta sonu gecikmeleri, sunucu yeniden başlatmaları vb. için).
+# Bot'un günlük taraması (09:00, günde tek sefer -- bkz. run_bot notu)
+# normal koşullarda o saatte biter. Bu eşik, 24 saatlik güvenli aralığa
+# cömert bir pay ekliyor (tatil/hafta sonu gecikmeleri, sunucu yeniden
+# başlatmaları vb. için).
 SON_TARAMA_TAZELIK_ESIGI_SAAT = 30
 
 
