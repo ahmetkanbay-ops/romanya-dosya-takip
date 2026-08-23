@@ -30,7 +30,7 @@ from types import SimpleNamespace
 from urllib.parse import quote
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -588,6 +588,35 @@ def root():
             toplam_bekleyen=onbellek["toplam_bekleyen"],
         )
     return tanitim_sayfasi_html()
+
+
+# 2026-08-23 EKLENTİSİ: Kullanıcı Google'da site adını aratınca hiç
+# indekslenmediğimizi fark etti (rakip bir reklam çıkıyor, Google'ın "AI
+# Bakışı" da bizi tanımadığı için "resmi olmayan/bireysel test projesi"
+# diye tahmin yürütüyordu). Kök neden: site HİÇ Google'a bildirilmemiş --
+# ne robots.txt/sitemap.xml vardı, ne Search Console'a kayıtlıydı. Bu
+# ikisi, arama motorlarının siteyi keşfetmesi için asgari/standart adım --
+# tek başına indekslenmeyi garanti etmez ama önkoşuludur.
+_SITE_KOK = "https://romanya-dosya-takip.onrender.com"
+
+
+@app.get("/robots.txt", response_class=PlainTextResponse)
+def robots_txt():
+    return (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /admin\n"
+        "Disallow: /api/\n"
+        f"Sitemap: {_SITE_KOK}/sitemap.xml\n"
+    )
+
+
+@app.get("/sitemap.xml", response_class=Response)
+def sitemap_xml():
+    sayfalar = ["/", "/gizlilik-politikasi", "/kullanim-sartlari"]
+    ogeler = "".join(f"<url><loc>{_SITE_KOK}{yol}</loc></url>" for yol in sayfalar)
+    icerik = f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{ogeler}</urlset>'
+    return Response(content=icerik, media_type="application/xml")
 
 
 def _mesai_saatinde_mi() -> bool:
