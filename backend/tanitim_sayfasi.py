@@ -23,6 +23,22 @@ _OZELLIKLER = [
     ("💳", "Tek Seferlik Satın Alma", "Aynı Google hesabıyla istediğiniz kadar cihaza ücretsiz olarak tekrar yükleyin -- telefon değiştirseniz bile tekrar ödeme yapmazsınız."),
 ]
 
+# 2026-08-23 EKLENTİSİ (ASO/SEO): Bu sorular uydurma değil -- başvuru
+# sahiplerinin Google'a gerçekten yazdığı terimler ("Stadiu Dosar nedir",
+# "dosya numaram nerede" vb.). Amaç: bir kullanıcı kendi dosya numarasını
+# ararken bu sayfayı organik olarak bulsun. Sayfanın geri kalanıyla aynı
+# dürüst ton -- pazarlama abartısı değil, gerçek/kısa açıklamalar.
+_SSS = [
+    ("Stadiu Dosar nedir?",
+     "Stadiu Dosar, Romanya Adalet Bakanlığı'nın (cetatenie.just.ro) yayınladığı, vatandaşlık başvurularının hangi aşamada olduğunu gösteren resmi listedir. Dosya numaranız bu listede geçiyorsa başvurunuz hâlâ inceleme sürecindedir."),
+    ("Ordine listesi nedir, Stadiu Dosar'dan farkı ne?",
+     "Ordine, başvurusu ONAYLANMIŞ dosyaların yayınlandığı resmi listedir (kanun maddesine göre ayrı ayrı, ör. \"Articolul 11\", \"Ordine minori\"). Yani Stadiu Dosar sürecin içinde olduğunuzu, Ordine ise vatandaşlığınızın onaylandığını gösterir."),
+    ("Dosya numaramı nerede bulabilirim?",
+     "Dosya numaranız, başvurunuzu yaptığınızda size verilen resmi belgede (başvuru makbuzu/dilekçe) yazılıdır. Numarayı ve başvuru yılınızı bildiğiniz sürece Romanya Dosya Takip'te sorgulayabilirsiniz."),
+    ("Sıra tahmini nasıl hesaplanıyor?",
+     "Aynı yıl ve maddede sizden önce onaylanmış en yakın dosya numaralarına bakılarak yaklaşık bir sıra tahmini gösterilir -- bu resmi bir taahhüt değildir, sadece mevcut onay hızına göre bir fikir vermek içindir."),
+]
+
 _EKRAN_GORUNTULERI = [
     ("ekran-ana.png", "Sorgulama ekranı"),
     ("ekran-onay.png", "Onaylanmış başvuru sonucu"),
@@ -65,6 +81,11 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
         f'<div class="ozellik"><span class="ikon">{ikon}</span>'
         f'<div><h3>{baslik}</h3><p>{aciklama}</p></div></div>'
         for ikon, baslik, aciklama in _OZELLIKLER
+    )
+
+    sss_html = "".join(
+        f'<div class="sss-satir"><h3>{soru}</h3><p>{cevap}</p></div>'
+        for soru, cevap in _SSS
     )
 
     if PLAY_STORE_URL:
@@ -199,6 +220,13 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
   .ozellik h3 {{ margin: 0 0 4px; font-size: 15px; }}
   .ozellik p {{ margin: 0; color: var(--gri); font-size: 13px; }}
 
+  .sss-liste {{ max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }}
+  .sss-satir {{
+    background: var(--yuzey); border: 1px solid var(--kenar); border-radius: 14px; padding: 18px 22px;
+  }}
+  .sss-satir h3 {{ margin: 0 0 6px; font-size: 15.5px; color: var(--beyaz); }}
+  .sss-satir p {{ margin: 0; color: var(--gri); font-size: 13.5px; }}
+
   .cta {{ text-align: center; padding: 56px 20px; }}
   .cta h2 {{ margin-bottom: 18px; }}
 
@@ -247,6 +275,14 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
     <p class="bolum-alt">Vatandaşlık başvuru sürecinizi kolaylaştırmak için</p>
     <div class="ozellikler-izgara">
       {ozellik_html}
+    </div>
+  </section>
+
+  <section>
+    <h2>Sıkça Sorulan Sorular</h2>
+    <p class="bolum-alt">Stadiu Dosar, Ordine ve dosya sorgulama hakkında</p>
+    <div class="sss-liste">
+      {sss_html}
     </div>
   </section>
 
