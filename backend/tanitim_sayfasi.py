@@ -261,7 +261,7 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
 
   <section>
     <h2>Uygulamadan Gerçek Görüntüler</h2>
-    <p class="bolum-alt">Uydurma değil, gerçek uygulamadan alınmış ekranlar</p>
+    <p class="bolum-alt">Uygulamayı kurmadan önce gerçek arayüzüne göz atın</p>
     <div class="karusel">
       {karusel_resim_html}
     </div>
