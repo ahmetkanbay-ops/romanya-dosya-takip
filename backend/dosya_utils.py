@@ -652,6 +652,15 @@ def tabloyu_hazirla(conn):
         "CREATE INDEX IF NOT EXISTS idx_dosya_ana_norm_yil "
         "ON dosyalar(ana_kategori, dosya_no_norm, yil)"
     )
+    # 2026-08-23 EKLENTİSİ (admin paneli performansı): /admin panelindeki
+    # "SELECT durum, COUNT(*) FROM dosyalar GROUP BY durum" sorgusu, durum
+    # kolonunda hiç indeks olmadığı için ~1.3M satırlık tabloda tam tarama +
+    # sıralama yapıyordu (5 dakikalık önbellek zaten kullanıcıya hissettirilen
+    # gecikmeyi gizliyordu, ama her önbellek yenilenişinde bu maliyet
+    # gerçekten ödeniyordu). "ana_kategori" tarafı zaten yukarıdaki
+    # idx_dosya_ana_norm_yil'in ilk kolonu olduğu için örtük olarak
+    # hızlanıyordu, "durum" için ayrı bir indeks yoktu.
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_dosya_durum ON dosyalar(durum)")
 
     conn.commit()
 
