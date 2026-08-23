@@ -340,7 +340,14 @@ def run_bot(yeniden_deneme_mi=False):
 # ortasında yazma işlemi olsa bile SQLite bunu kendi içinde senkronize
 # ediyor (yarım/bozuk bir kopya riski yok).
 YEDEK_KLASOR = os.path.join(VERI_DIZINI, "yedekler")
-YEDEK_SAKLAMA_GUN_SAYISI = 7  # bundan eski yedekler otomatik silinir
+# 2026-08-23 DÜZELTMESİ: 7 gün X ~1 GB'lık veritabanı = Render'ın kalıcı
+# diskinde (10 GB) tek başına ~7 GB'ı yerel yedekler yiyordu -- disk %80.3
+# dolulukla kritik uyarı verdi (bkz. sistem_olaylari). B2 bulut yedeği
+# (30 gün saklama, Render'dan TAMAMEN bağımsız bir depoda) artık gerçek
+# felaket senaryosunu zaten karşılıyor -- yerelde uzun süre tutmanın
+# değeri kalmadı. 2 gün, hızlı/basit bir geri yükleme için yine de güncel
+# bir yerel kopya bırakıyor, disktekiyse ~5 GB boşaltıyor.
+YEDEK_SAKLAMA_GUN_SAYISI = 2  # bundan eski yedekler otomatik silinir (B2'de 30 gün ayrıca saklanıyor)
 
 # ---------------------------------------------------------------------------
 # BULUT YEDEKLEME (Backblaze B2) -- 2026-08-22
