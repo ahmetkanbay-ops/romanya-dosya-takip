@@ -601,19 +601,12 @@ def admin_sayfa_html(m):
       </div>
     </div>
   </div>
-  <script>
-    // 2026-08-22: Sayfanın kendisi ANINDA açılsın diye, dış servis
-    // kontrolleri sayfa yüklendikten SONRA, ayrı bir istekle çekiliyor.
-    // Basic Auth kimlik bilgisi tarayıcı tarafından bu adrese otomatik
-    // ekleniyor (aynı köken/realm, /admin sayfası zaten doğrulanmıştı).
-    fetch('/api/admin/bugunun-durumu')
-      .then(r => r.ok ? r.text() : Promise.reject(r.status))
-      .then(html => {{ document.getElementById('bugunun-durumu-icerik').innerHTML = html; }})
-      .catch(() => {{
-        document.getElementById('bugunun-durumu-icerik').innerHTML =
-          '<p class="bos">Durum bilgisi alınamadı, sayfayı yenileyin.</p>';
-      }});
-  </script>
+  <!-- 2026-08-22 DÜZELTMESİ: bu script SATIR İÇİYDİ ama main.py'deki CSP
+       başlığı (default-src 'self', script-src için ayrı izin yok) satır içi
+       script'leri sessizce engelliyordu -- "Bugünün Durumu" bu yüzden
+       sonsuza kadar "Yükleniyor…"da kalıyordu. Aynı kökenden servis edilen
+       ayrı bir dosyaya taşındı (bkz. statik/admin/bugunun-durumu.js). -->
+  <script src="/statik/admin/bugunun-durumu.js"></script>
 
   <div class="bolum">
     <p class="bolum-baslik">Kullanıcılar</p>
