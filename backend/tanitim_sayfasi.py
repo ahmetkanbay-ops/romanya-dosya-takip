@@ -109,6 +109,9 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Romanya Dosya Takip</title>
 <meta name="description" content="Romanya vatandaşlık başvurunuzun Stadiu Dosar ve Ordine durumunu anında sorgulayın, onaylandığında otomatik bildirim alın.">
+<!-- 2026-08-23: Google Search Console site sahipliği doğrulaması --
+     kaldırmayın, doğrulanmış durumu bu etikete bağlı. -->
+<meta name="google-site-verification" content="9ZHuCTWpd557SMeinm3TsH9kGUjD8y4T7uMBArv9iOk" />
 <style>
   :root {{
     --lacivert-koyu: #0f1a2e;
