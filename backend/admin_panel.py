@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 /admin istatistik paneli -- SADECE proje sahibinin kullanması için,
-şifreyle korunan (bkz. main.py'deki HTTPBasic kontrolü), salt-okunur bir
+şifreyle korunan (bkz. main.py'deki imzalı oturum çerezi kontrolü,
+2026-08-23'te HTTP Basic Auth'un yerini aldı), salt-okunur bir
 "arka ofis" görünümü. Kapsam 2026-08-19'da netleştirildi:
 
   1) Kullanıcı sayıları  -- toplam/yeni cihaz, favori sayıları
@@ -477,6 +478,77 @@ def _bugunun_durumu_html(durumlar):
     return "".join(satirlar)
 
 
+_ADMIN_PWA_HEAD = """
+<link rel="manifest" href="/admin/manifest.json">
+<meta name="theme-color" content="#0f1a2e">
+<link rel="apple-touch-icon" href="/statik/admin/icon-1024.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RDT Admin">
+<meta name="mobile-web-app-capable" content="yes">
+"""
+
+
+def admin_giris_html(hata=False):
+    """2026-08-23 EKLENTİSİ: HTTP Basic Auth'un yerini alan giriş sayfası --
+    kullanıcı "her seferinde parola girmekten sıkıldım" dedi, artık başarılı
+    girişte 90 günlük imzalı bir çerez bırakılıyor (bkz. main.py
+    _admin_oturum_dogrula), bir daha bu formu görmesi gerekmeyecek."""
+    hata_html = (
+        '<p class="hata">Kullanıcı adı veya şifre hatalı.</p>' if hata else ""
+    )
+    return f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin Girişi — Romanya Dosya Takip</title>
+{_ADMIN_PWA_HEAD}
+<style>
+  * {{ box-sizing: border-box; }}
+  body {{
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: {LACIVERT_KOYU}; color: #F5F7FA;
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    padding: 20px;
+  }}
+  form {{
+    width: 100%; max-width: 340px; background: {LACIVERT}; border: 1px solid #2E3B5C;
+    border-radius: 16px; padding: 32px 28px;
+  }}
+  h1 {{ font-size: 18px; margin: 0 0 4px; text-align: center; }}
+  p.alt {{ margin: 0 0 24px; text-align: center; color: #8E9AB8; font-size: 13px; }}
+  p.hata {{
+    background: rgba(217,83,79,0.12); border: 1px solid rgba(217,83,79,0.4);
+    color: #f2a09d; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin: 0 0 18px;
+  }}
+  label {{ display: block; font-size: 12.5px; color: #8E9AB8; margin: 0 0 6px; }}
+  input {{
+    width: 100%; padding: 12px 14px; margin-bottom: 16px; border-radius: 10px;
+    border: 1px solid #2E3B5C; background: {LACIVERT_KOYU}; color: #F5F7FA; font-size: 15px;
+  }}
+  input:focus {{ outline: none; border-color: {ALTIN}; }}
+  button {{
+    width: 100%; padding: 13px; border: none; border-radius: 10px; background: {ALTIN};
+    color: {LACIVERT_KOYU}; font-weight: 800; font-size: 15px; cursor: pointer;
+  }}
+</style>
+</head>
+<body>
+  <form method="post" action="/admin/giris">
+    <h1>🔒 Admin Paneli</h1>
+    <p class="alt">Romanya Dosya Takip -- sadece proje sahibi için</p>
+    {hata_html}
+    <label for="kullanici_adi">Admin kullanıcı adı</label>
+    <input type="text" id="kullanici_adi" name="kullanici_adi" autocomplete="username" autofocus required>
+    <label for="sifre">Admin şifresi</label>
+    <input type="password" id="sifre" name="sifre" autocomplete="current-password" required>
+    <button type="submit">Giriş Yap</button>
+  </form>
+</body>
+</html>"""
+
+
 def admin_sayfa_html(m):
     k = m["kullanicilar"]
     s = m["sistem"]
@@ -514,6 +586,7 @@ def admin_sayfa_html(m):
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Admin Paneli — Romanya Dosya Takip</title>
+{_ADMIN_PWA_HEAD}
 <style>
   :root {{
     --lacivert-koyu: {LACIVERT_KOYU}; --lacivert: {LACIVERT}; --altin: {ALTIN};
@@ -678,7 +751,7 @@ def admin_sayfa_html(m):
     </div>
   </div>
 
-  <footer class="altbilgi">Romanya Dosya Takip — sadece proje sahibi için, salt-okunur görünüm.</footer>
+  <footer class="altbilgi">Romanya Dosya Takip — sadece proje sahibi için, salt-okunur görünüm. · <a href="/admin/cikis" style="color:var(--metin-ikincil)">Çıkış yap</a></footer>
 </div>
 </body>
 </html>"""

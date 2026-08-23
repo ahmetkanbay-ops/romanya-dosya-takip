@@ -18,6 +18,8 @@ try:
 except Exception:
     pass
 
+import hashlib
+import hmac
 import re
 import secrets
 import sqlite3
@@ -28,10 +30,9 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from types import SimpleNamespace
 from urllib.parse import quote
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, Form, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, PlainTextResponse, Response
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -78,7 +79,7 @@ from hukuki_metinler import (
     GIZLILIK_POLITIKASI_METIN,
     sayfa_html,
 )
-from admin_panel import metrikleri_hesapla, admin_sayfa_html, bugunun_durumu_html_getir
+from admin_panel import metrikleri_hesapla, admin_sayfa_html, admin_giris_html, bugunun_durumu_html_getir
 from tanitim_sayfasi import tanitim_sayfasi_html
 
 RESMI_LISTE_URL = "https://cetatenie.just.ro/"
@@ -123,23 +124,58 @@ def app_anahtarini_dogrula(x_app_key: Optional[str] = Header(default=None)):
 ADMIN_KULLANICI_ADI = os.environ.get("ADMIN_KULLANICI_ADI", "admin")
 ADMIN_SIFRE = os.environ.get("ADMIN_SIFRE")
 
-_admin_guvenlik = HTTPBasic()
+# 2026-08-23 DEĞİŞİKLİĞİ (kullanıcı isteği: "her seferinde parolayı girmekle
+# uğraşmaktan sıkıldım, telefondan da uygulama gibi kullanabileyim"): HTTP
+# Basic Auth'un iki pratik sorunu vardı -- (1) tarayıcı sekmesi kapanınca
+# kimlik bilgisi unutuluyor, her ziyarette yeniden soruyor, (2) telefonda
+# "ana ekrana ekle" ile açılan bir PWA, Basic Auth'un native tarayıcı
+# popup'ını hiç göstermiyor/güvenilir çalışmıyor. Çözüm: kendi imzalı
+# (HMAC-SHA256) oturum çerezimiz -- 90 gün geçerli, sunucu tarafında hiçbir
+# oturum durumu SAKLAMIYOR (stateless, tıpkı JWT gibi ama harici kütüphane
+# gerektirmeden) -- çerez sadece "son geçerlilik zamanı + bu sunucunun gizli
+# anahtarıyla imzası"nı taşıyor, sahtesi üretilemez (bkz. _admin_oturum_dogrula).
+ADMIN_OTURUM_ANAHTARI = os.environ.get("ADMIN_OTURUM_ANAHTARI")
+ADMIN_OTURUM_COOKIE_ADI = "admin_oturum"
+ADMIN_OTURUM_GECERLILIK_SN = 90 * 24 * 60 * 60  # 90 gün
 
 
-def admin_girisini_dogrula(kimlik: HTTPBasicCredentials = Depends(_admin_guvenlik)):
-    if not ADMIN_SIFRE:
+def _admin_oturum_imzala(son_gecerlilik_ts: int) -> str:
+    mesaj = f"admin:{son_gecerlilik_ts}".encode()
+    imza = hmac.new(ADMIN_OTURUM_ANAHTARI.encode(), mesaj, hashlib.sha256).hexdigest()
+    return f"{son_gecerlilik_ts}.{imza}"
+
+
+def _admin_oturum_dogrula(request: Request) -> bool:
+    """Çerezi doğrular -- geçersiz/süresi dolmuş/imzasız/hiç yoksa False
+    döner (fail-closed, tıpkı eski ADMIN_SIFRE kontrolü gibi)."""
+    if not (ADMIN_SIFRE and ADMIN_OTURUM_ANAHTARI):
+        return False
+    cerez = request.cookies.get(ADMIN_OTURUM_COOKIE_ADI, "")
+    if "." not in cerez:
+        return False
+    son_gecerlilik_str, imza = cerez.split(".", 1)
+    try:
+        son_gecerlilik_ts = int(son_gecerlilik_str)
+    except ValueError:
+        return False
+    beklenen_imza = _admin_oturum_imzala(son_gecerlilik_ts).split(".", 1)[1]
+    if not hmac.compare_digest(imza, beklenen_imza):
+        return False
+    return time.time() <= son_gecerlilik_ts
+
+
+def admin_girisini_dogrula(request: Request):
+    """/api/admin/* uçları için -- geçersizse JSON 401 döner (bu uçlar
+    tarayıcıdan JS ile fetch() ile çağrılıyor, HTML sayfaya yönlendirme
+    anlamsız). Sayfa uçları (/admin) kendi içinde _admin_oturum_dogrula'yı
+    doğrudan kullanıp /admin/giris'e yönlendiriyor -- bkz. admin_paneli()."""
+    if not (ADMIN_SIFRE and ADMIN_OTURUM_ANAHTARI):
         raise HTTPException(
             status_code=503,
-            detail="Admin paneli devre dışı: ADMIN_SIFRE ortam değişkeni ayarlanmamış.",
+            detail="Admin paneli devre dışı: ADMIN_SIFRE/ADMIN_OTURUM_ANAHTARI ayarlanmamış.",
         )
-    kullanici_dogru = secrets.compare_digest(kimlik.username, ADMIN_KULLANICI_ADI)
-    sifre_dogru = secrets.compare_digest(kimlik.password, ADMIN_SIFRE)
-    if not (kullanici_dogru and sifre_dogru):
-        raise HTTPException(
-            status_code=401,
-            detail="Geçersiz kullanıcı adı veya şifre",
-            headers={"WWW-Authenticate": "Basic"},
-        )
+    if not _admin_oturum_dogrula(request):
+        raise HTTPException(status_code=401, detail="Giriş gerekli")
     return True
 
 
@@ -729,18 +765,85 @@ def kullanim_sartlari_duz_metin():
 
 
 @app.get("/admin", response_class=HTMLResponse)
-def admin_paneli(_giris=Depends(admin_girisini_dogrula)):
+def admin_paneli(request: Request):
     """
     2026-08-19: SADECE proje sahibi için, kullanım istatistiklerini gösteren
     salt-okunur bir sayfa (bkz. admin_panel.py başındaki kapsam notu).
     Mobil uygulamanın hiçbir özelliği bu uç noktaya bağımlı değil.
+
+    2026-08-23: Basic Auth yerine imzalı çerez kontrolü -- geçersizse
+    (401 JSON döndürüp tarayıcıya çirkin bir hata göstermek yerine) düzgün
+    bir giriş sayfasına yönlendiriyoruz.
     """
+    if not _admin_oturum_dogrula(request):
+        return RedirectResponse(url="/admin/giris", status_code=303)
     conn = veritabani_baglantisi(DB_FILE)
     try:
         metrikler = metrikleri_hesapla(conn, DB_FILE, _son_basarili_tarama_oku())
     finally:
         conn.close()
     return admin_sayfa_html(metrikler)
+
+
+@app.get("/admin/giris", response_class=HTMLResponse)
+def admin_giris_sayfasi(hata: Optional[str] = None):
+    return admin_giris_html(hata=bool(hata))
+
+
+@app.post("/admin/giris")
+@limiter.limit("10/minute")
+def admin_giris_gonder(
+    request: Request,
+    kullanici_adi: str = Form(...),
+    sifre: str = Form(...),
+):
+    if not (ADMIN_SIFRE and ADMIN_OTURUM_ANAHTARI):
+        raise HTTPException(status_code=503, detail="Admin paneli devre dışı.")
+    kullanici_dogru = secrets.compare_digest(kullanici_adi, ADMIN_KULLANICI_ADI)
+    sifre_dogru = secrets.compare_digest(sifre, ADMIN_SIFRE)
+    if not (kullanici_dogru and sifre_dogru):
+        print("! Admin paneli: başarısız giriş denemesi.")
+        return RedirectResponse(url="/admin/giris?hata=1", status_code=303)
+    son_gecerlilik_ts = int(time.time()) + ADMIN_OTURUM_GECERLILIK_SN
+    yanit = RedirectResponse(url="/admin", status_code=303)
+    yanit.set_cookie(
+        key=ADMIN_OTURUM_COOKIE_ADI,
+        value=_admin_oturum_imzala(son_gecerlilik_ts),
+        max_age=ADMIN_OTURUM_GECERLILIK_SN,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        path="/",
+    )
+    return yanit
+
+
+@app.get("/admin/cikis")
+def admin_cikis():
+    yanit = RedirectResponse(url="/admin/giris", status_code=303)
+    yanit.delete_cookie(ADMIN_OTURUM_COOKIE_ADI, path="/")
+    return yanit
+
+
+@app.get("/admin/manifest.json")
+def admin_manifest():
+    """2026-08-23 EKLENTİSİ: kullanıcı telefondan "Ana ekrana ekle" dediğinde
+    tarayıcı çubuğu olmadan, kendi ikonuyla, uygulama gibi açılsın diye
+    (PWA -- Progressive Web App). Sayfanın kendisi/tasarımı DEĞİŞMİYOR,
+    sadece telefona "bunu bir uygulama gibi kur" bilgisini veriyor."""
+    return {
+        "name": "Romanya Dosya Takip — Admin",
+        "short_name": "RDT Admin",
+        "start_url": "/admin",
+        "scope": "/admin",
+        "display": "standalone",
+        "background_color": "#0f1a2e",
+        "theme_color": "#0f1a2e",
+        "icons": [
+            {"src": "/statik/admin/icon-1024.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any"},
+            {"src": "/statik/admin/icon-1024.png", "sizes": "1024x1024", "type": "image/png", "purpose": "maskable"},
+        ],
+    }
 
 
 @app.get("/api/admin/bugunun-durumu", response_class=HTMLResponse)

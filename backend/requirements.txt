@@ -44,3 +44,8 @@ sentry-sdk[fastapi]==2.68.0
 # main.py b2_yedegini_yukle()'yi hiç çağırmıyor, bu paket kuruluysa da
 # devre dışı kalır (SENTRY_DSN ile aynı desen).
 boto3==1.43.78
+
+# 2026-08-23: Admin paneli girişi artık HTML form (POST, kullanici_adi/sifre
+# alanlari) kullanıyor -- eskiden HTTP Basic Auth'du, form-data ayrıştırmak
+# için FastAPI'nin Form(...) desteği bu pakete ihtiyaç duyuyor.
+python-multipart==0.0.32
