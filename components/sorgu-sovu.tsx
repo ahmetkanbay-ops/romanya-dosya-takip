@@ -60,13 +60,16 @@ const BEYAZ = '#F5F7FA';
 // `loop={false}` + imperatif `play()` + `onAnimationFinish` callback'i
 // birlikte kullanılıyor: her bitişte sayaç bir artırılıyor, TUR_SAYISI'na
 // ulaşana kadar yeniden `play()` çağrılıyor.
-export const TUR_SAYISI = 3;
+// 2026-08-25 (kullanıcı isteği): 3'ten 2'ye düşürüldü -- TOPLAM_HEDEF_SN
+// sabit kaldığı için (aşağıda), tur süresi otomatik olarak uzuyor
+// (5.5/2 = 2.75sn/tur), toplam gösterim süresi DEĞİŞMİYOR.
+export const TUR_SAYISI = 2;
 // Animasyonun (assets/animasyonlar/sorgu-arama.json) DOĞAL tek tur süresi:
 // JSON'un kendi ip/op'u 0-60 kare, 30fps -> 60/30 = 2sn.
 const TUR_DOGAL_SURESI_SN = 2;
-// 2026-08-17 (kullanıcı isteği, 3. tur): toplam TUR_SAYISI tur 5-6sn'de
-// bitsin -- hedef toplam 5.5sn, yani tek tur ~1.83sn (doğal 2sn'den bile
-// biraz HIZLI, TUR_HIZI 1'in az üstünde çıkıyor).
+// 2026-08-17 (kullanıcı isteği): toplam TUR_SAYISI tur 5-6sn'de bitsin --
+// hedef toplam 5.5sn, TUR_SAYISI değişse bile bu toplam süre sabit kalır,
+// tek tur süresi/hızı buna göre otomatik ayarlanır (bkz. TUR_SURESI_SN).
 const TOPLAM_HEDEF_SN = 5.5;
 const TUR_SURESI_SN = TOPLAM_HEDEF_SN / TUR_SAYISI;
 const TUR_HIZI = TUR_DOGAL_SURESI_SN / TUR_SURESI_SN;
