@@ -137,9 +137,21 @@ Veriler, sunucumuzla şifreli bağlantı (HTTPS) üzerinden iletilir.
 6. Verilerin Saklanma Süresi ve Silinmesi
 Favori dosyalarınızı istediğiniz zaman uygulama içindeki "Favorilerim"
 sekmesinden kaldırabilirsiniz. Bildirim iznini telefonunuzun Ayarlar
-kısmından her zaman kapatabilirsiniz. Tüm verilerinizin tamamen
-silinmesini talep etmek için {ILETISIM_EPOSTA} adresinden bize
-ulaşabilirsiniz.
+kısmından her zaman kapatabilirsiniz.
+
+Tüm verilerinizin ({UYGULAMA_ADI} tarafından saklanan cihaz kimliğiniz,
+bildirim belirteciniz ve favori/izlenen dosya kayıtlarınız dahil) kalıcı
+olarak silinmesini talep etmek için şu adımları izleyin:
+1. {ILETISIM_EPOSTA} adresine "Verilerimi silin" konu başlığıyla bir
+   e-posta gönderin.
+2. Talebinizi doğrulayabilmemiz için (mümkünse) uygulamada favori
+   olarak eklediğiniz bir dosya numarasını e-postada belirtin.
+3. Talebiniz en geç 7 iş günü içinde işleme alınır ve cihaz kimliğiniz,
+   bildirim belirteciniz, favori/izlenen dosya kayıtlarınız kalıcı
+   olarak sunucularımızdan silinir; bu işlem geri alınamaz.
+Not: dosya numarası sorgulamaları veya cetatenie.just.ro'daki kamuya
+açık PDF listeleri sizin kişisel veriniz olmadığı için bu silme
+talebinin kapsamı dışındadır.
 
 7. Çocuklar
 Bu uygulama çocuklara yönelik değildir, bilerek 13 yaş altı
