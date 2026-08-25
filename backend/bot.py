@@ -443,10 +443,15 @@ def _b_plani_devreye_al(page, tip, alt_kategori, http_oturum, kontrol_conn):
             continue
 
         try:
-            pdf_res = http_oturum.get(href, timeout=45, headers={"Referer": "https://cetatenie.just.ro/"})
-            if pdf_res.status_code == 200 and len(pdf_res.content) > 1000:
+            # 2026-08-25: bkz. A Planı'ndaki aynı düzeltmenin gerekçe notu --
+            # ayrı http_oturum (curl_cffi) artık WAF'a takılıyor, PDF'i
+            # Playwright context'inin kendi ağ istemcisiyle indiriyoruz.
+            pdf_res = page.context.request.get(
+                href, headers={"Referer": "https://cetatenie.just.ro/"}, timeout=45000
+            )
+            if pdf_res.status == 200 and len(pdf_res.body()) > 1000:
                 with open(hedef_yol, 'wb') as f:
-                    f.write(pdf_res.content)
+                    f.write(pdf_res.body())
                 with open(hedef_yol + ".url", "w", encoding="utf-8") as f:
                     f.write(href)
                 eklenen, yeni = pdf_verilerini_ice_aktar(hedef_yol, tip, alt_kategori, kaynak_url=href)
@@ -710,18 +715,33 @@ def botu_calistir():
                             try:
                                 print(f"      ⬇ İndiriliyor: {dosya_adi}")
 
-                                # Gerçek bir tarayıcı, bir sayfadaki linke
-                                # tıkladığında her zaman o sayfayı "Referer"
-                                # olarak gönderir -- bu başlığın eksik olması
-                                # bazı WAF'lar için "bu bir bot" sinyali
-                                # sayılabiliyor, bu yüzden PDF indirirken de
-                                # (kaynak) kategori sayfasını Referer olarak
-                                # ekliyoruz.
-                                pdf_res = http_oturum.get(href, timeout=45, headers={"Referer": url})
+                                # 2026-08-25 KÖK NEDEN DÜZELTMESİ (canlı testte
+                                # bulundu): site uzun süreli kesintiden sonra
+                                # yeniden açılınca WAF'ı güçlenmiş -- ayrı bir
+                                # curl_cffi/requests oturumuyla (Chrome TLS
+                                # parmak izi taklidi) indirme artık HER ZAMAN
+                                # 503 "Verifying your browser..." JS-challenge
+                                # sayfası dönüyordu (canlı doğrulandı: hem eski
+                                # hem yeni PDF'ler, tutarlı biçimde). Muhtemel
+                                # sebep: sayfa gezinme Firefox/Playwright ile
+                                # yapılırken indirme oturumu Chrome parmak izi
+                                # taklit ediyordu -- bu tutarsızlık artık
+                                # yakalanıyor. Çözüm: PDF'i de AYNI Playwright
+                                # context'inin kendi ağ istemcisiyle (context.
+                                # request) indiriyoruz -- gerçek tarayıcı
+                                # motorunun TLS/oturumunu kullandığı için WAF'ı
+                                # sayfa gezintisiyle birebir aynı şekilde geçer
+                                # (canlı doğrulandı: context.request.get ile
+                                # 200 + gerçek PDF içeriği). http_oturum artık
+                                # sadece B Planı'nda (bkz. _b_plani_devreye_al)
+                                # kullanılıyor, o da aynı şekilde düzeltildi.
+                                pdf_res = context.request.get(
+                                    href, headers={"Referer": url}, timeout=45000
+                                )
 
-                                if pdf_res.status_code == 200 and len(pdf_res.content) > 1000:
+                                if pdf_res.status == 200 and len(pdf_res.body()) > 1000:
                                     with open(hedef_yol, 'wb') as f:
-                                        f.write(pdf_res.content)
+                                        f.write(pdf_res.body())
 
                                     # PDF'in gerçek web adresini küçük bir eşlik
                                     # dosyasına yazıyoruz ki mobildeki "Resmi Belgeyi
