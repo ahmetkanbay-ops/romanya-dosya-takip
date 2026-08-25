@@ -60,17 +60,19 @@ const BEYAZ = '#F5F7FA';
 // `loop={false}` + imperatif `play()` + `onAnimationFinish` callback'i
 // birlikte kullanılıyor: her bitişte sayaç bir artırılıyor, TUR_SAYISI'na
 // ulaşana kadar yeniden `play()` çağrılıyor.
-// 2026-08-25 (kullanıcı isteği): 3'ten 2'ye düşürüldü -- TOPLAM_HEDEF_SN
-// sabit kaldığı için (aşağıda), tur süresi otomatik olarak uzuyor
-// (5.5/2 = 2.75sn/tur), toplam gösterim süresi DEĞİŞMİYOR.
-export const TUR_SAYISI = 2;
+// 2026-08-25 (kullanıcı isteği, 2. düzeltme): tur sayısı 3'e geri alındı,
+// bunun yerine toplam süre (aşağıdaki TOPLAM_HEDEF_SN) 5.5sn'den 3sn'ye
+// düşürüldü -- 5.5sn uzun geldiği için, tur sayısını azaltmak yerine
+// aynı 3 turu daha hızlı (TUR_HIZI ~2x) bitirmek tercih edildi.
+export const TUR_SAYISI = 3;
 // Animasyonun (assets/animasyonlar/sorgu-arama.json) DOĞAL tek tur süresi:
 // JSON'un kendi ip/op'u 0-60 kare, 30fps -> 60/30 = 2sn.
 const TUR_DOGAL_SURESI_SN = 2;
-// 2026-08-17 (kullanıcı isteği): toplam TUR_SAYISI tur 5-6sn'de bitsin --
-// hedef toplam 5.5sn, TUR_SAYISI değişse bile bu toplam süre sabit kalır,
-// tek tur süresi/hızı buna göre otomatik ayarlanır (bkz. TUR_SURESI_SN).
-const TOPLAM_HEDEF_SN = 5.5;
+// 2026-08-17 (kullanıcı isteği): toplam TUR_SAYISI tur bu sürede bitsin --
+// TUR_SAYISI değişse bile bu toplam süre sabit kalır, tek tur süresi/hızı
+// buna göre otomatik ayarlanır (bkz. TUR_SURESI_SN). 2026-08-25: 5.5sn'den
+// 3sn'ye düşürüldü (kullanıcı: "5.5sn uzun geldi").
+const TOPLAM_HEDEF_SN = 3;
 const TUR_SURESI_SN = TOPLAM_HEDEF_SN / TUR_SAYISI;
 const TUR_HIZI = TUR_DOGAL_SURESI_SN / TUR_SURESI_SN;
 export const TOPLAM_SOV_SURESI_MS = TOPLAM_HEDEF_SN * 1000;
