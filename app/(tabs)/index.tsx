@@ -626,7 +626,7 @@ export default function IndexScreen() {
                 (kategoriUyarisi || []).slice(0, 3).map(kategoriEtiketiOlustur).join(', ')
               )}
             </Text>
-            {(kategoriUyarisi || []).slice(0, 2).map((k, i) => (
+            {(kategoriUyarisi || []).slice(0, 3).map((k, i) => (
               <TouchableOpacity
                 key={i}
                 style={styles.uyariUygulaButon}
