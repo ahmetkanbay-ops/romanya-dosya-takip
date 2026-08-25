@@ -64,3 +64,6 @@ backend/__pycache__/
 __pycache__/
 *.pyc
 backend/render_yedekleri/
+
+# Google Cloud servis hesabi anahtari -- ASLA commit edilmemeli (EAS submit icin)
+gcp-service-account.json
