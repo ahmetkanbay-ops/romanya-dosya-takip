@@ -173,10 +173,11 @@ def _site_erisilebilir_mi(page, url, deneme_sayisi=2):
     farklı olduğu için ayrı ayrı engelleniyor olabilir.
 
     ÇÖZÜM: bu kontrolü artık ayrı bir `requests` isteğiyle DEĞİL, bizzat
-    tarama için zaten kullandığımız GERÇEK Playwright/Firefox sekmesiyle
-    yapıyoruz -- Firefox gerçek bir tarayıcı olduğu için elle açılan
-    tarayıcıyla birebir aynı davranışı gösterir, bu nedenle bu engelin
-    dışında kalır.
+    tarama için zaten kullandığımız GERÇEK Playwright tarayıcı sekmesiyle
+    (2026-08-25'ten beri Chromium, bkz. botu_calistir() -- bellek nedeniyle
+    Firefox'tan geçildi) yapıyoruz -- gerçek bir tarayıcı motoru olduğu
+    için elle açılan tarayıcıyla birebir aynı davranışı gösterir, bu
+    nedenle bu engelin dışında kalır.
     """
     for deneme in range(1, deneme_sayisi + 1):
         try:
@@ -349,7 +350,7 @@ def _wp_json_ile_pdf_kesfet(page, taban_url="https://cetatenie.just.ro", sayfa_s
     genelindeki WAF'ın JS meydan okumasının ("Verifying your browser...")
     ARKASINDA -- düz `requests`/`curl_cffi` (JS ÇALIŞTIRMAZLAR) her zaman
     503 alır, hiçbir zaman gerçek JSON'a ulaşamaz. Bu yüzden A Planı'nın
-    zaten kullandığı GERÇEK Playwright/Firefox `page` nesnesi üzerinden
+    zaten kullandığı GERÇEK Playwright `page` nesnesi üzerinden
     (meydan okuma otomatik çözülene kadar bekleyip) istek atılıyor --
     canlı testte doğrulandı: ~4sn içinde gerçek PDF verisi geliyor.
     """
@@ -469,7 +470,7 @@ def _b_plani_devreye_al(page, tip, alt_kategori, http_oturum, kontrol_conn):
     return indirilen_sayisi, kaydedilen_kayit, yeni_kayitlar
 
 
-def _bildirimleri_gonder(tum_yeni_kayitlar, bulunamayan_kategoriler, toplam_pdf_bulunan):
+def _bildirimleri_gonder(tum_yeni_kayitlar, bulunamayan_kategoriler, toplam_pdf_bulunan, basarisiz_indirme_sayisi=0):
     # 1) Genel duyuru: yeni kayıt varsa TÜM kullanıcılara bildirim.
     if tum_yeni_kayitlar:
         tokenlar = _tum_push_tokenlari()
@@ -514,6 +515,22 @@ def _bildirimleri_gonder(tum_yeni_kayitlar, bulunamayan_kategoriler, toplam_pdf_
             "erişim sorunu olabilir, kontrol et."
         )
 
+    # 2026-08-25 EKLENTİSİ: kör noktanın kapatılması -- yukarıdaki kontrol
+    # SADECE "hiç PDF LİNKİ bulunamadı" durumunu yakalıyor. Bizim gerçek
+    # yaşadığımız arıza farklıydı: linkler (toplam_pdf_bulunan) normal
+    # şekilde bulunuyordu ama İNDİRME aşaması (WAF 503 vb.) sessizce
+    # başarısız oluyordu -- hiçbir uyarı gitmiyordu, sorun günler sonra
+    # kullanıcı fark edene kadar gizli kaldı. Eşik olarak 3 seçildi: tek
+    # bir ara sıra ağ hatası (kullanıcıyı gereksiz yere telaşlandırmadan)
+    # normal sayılır, ama art arda birden fazla başarısız GERÇEK indirme
+    # denemesi artık rastgele bir hata değil, sistemik bir engel işaretidir.
+    if basarisiz_indirme_sayisi >= 3:
+        admin_kritik_uyari(
+            f"{basarisiz_indirme_sayisi} PDF indirme denemesi başarısız oldu "
+            "(dosyalar bulundu ama indirilemedi) -- WAF/erişim engeli "
+            "olabilir, kontrol et."
+        )
+
 
 def botu_calistir():
     tabloyu_olustur()
@@ -522,6 +539,15 @@ def botu_calistir():
     tum_yeni_kayitlar = []
     bulunamayan_kategoriler = []
     toplam_pdf_bulunan = 0
+    # 2026-08-25 EKLENTİSİ: kök nedeni bulunan gerçek bir kör noktaya karşı --
+    # PDF LİNKLERİ bulunuyor (toplam_pdf_bulunan > 0, "hiç PDF yok" uyarısı
+    # hiç tetiklenmiyor) ama İNDİRME aşamasında (ör. WAF 503 döndürünce)
+    # sessizce "✗ Geçersiz"/"✗ Hata" yazılıp bir sonraki dosyaya geçiliyordu
+    # -- admin'e HİÇBİR uyarı gitmiyordu, sorun günler sonra kullanıcı fark
+    # edene kadar gizli kaldı. Artık her BAŞARISIZ gerçek indirme denemesi
+    # (dosya diskte yoktu, indirme denendi, 200/geçerli boyut alınamadı ya da
+    # exception oluştu) burada sayılıyor -- bkz. _bildirimleri_gonder.
+    basarisiz_indirme_sayisi = 0
 
     http_oturum = _http_oturumu_olustur()
 
@@ -530,7 +556,22 @@ def botu_calistir():
     kontrol_conn = veritabani_baglantisi(DB_FILE)
 
     with sync_playwright() as p:
-        browser = p.firefox.launch(headless=True)
+        # 2026-08-25 KÖK NEDEN DÜZELTMESİ (canlı Render metrikleriyle
+        # kanıtlandı): Firefox headless, context+page açar açmaz TEK
+        # BAŞINA ~524MB RSS'e çıkıyor (yerel ölçüm) -- Render Starter
+        # planının 512MB limitini FastAPI'nin kendi ~90MB'lık idle
+        # kullanımı eklenmeden bile aşıyor. Bot her tetiklendiğinde
+        # (hem günlük 09:00 taraması hem manuel tetiklemeler) OOM ile
+        # ÖLDÜRÜLÜYORDU -- "KATEGORİ: ORDINE, Bağlanılıyor..." print'i
+        # çıktıktan saniyeler sonra instance sessizce restart oluyordu,
+        # tarama hiçbir zaman ilerleyemiyordu (Render events API'sinde
+        # "oomKilled": {"memoryLimit": "512Mi"} ile doğrulandı). Chromium
+        # headless aynı sayfa+indirme akışında sadece ~312MB kullanıyor
+        # (yerel ölçüm) -- WAF geçişi ve context.request ile PDF indirme
+        # Chromium'da da AYNI şekilde çalıştığı canlı test edildi. Render
+        # build komutu da "playwright install firefox"tan "playwright
+        # install chromium"a güncellendi.
+        browser = p.chromium.launch(headless=True)
         context = browser.new_context()
         page = context.new_page()
 
@@ -758,9 +799,11 @@ def botu_calistir():
                                     print(f"      ✓ Kaydedildi: {dosya_adi}")
                                 else:
                                     print(f"      ✗ Geçersiz: {dosya_adi}")
+                                    basarisiz_indirme_sayisi += 1
 
                             except Exception as e:
                                 print(f"      ✗ Hata: {str(e)[:60]}")
+                                basarisiz_indirme_sayisi += 1
                         else:
                             # 2026-08-15: Zaten diskte olan ve veritabanında
                             # da kaydı bulunan PDF'ler artık HER TARAMADA
@@ -876,7 +919,9 @@ def botu_calistir():
         print(f"✗ Bekleme kuyruğu güncellenemedi: {str(e)[:80]}")
 
     try:
-        _bildirimleri_gonder(tum_yeni_kayitlar, bulunamayan_kategoriler, toplam_pdf_bulunan)
+        _bildirimleri_gonder(
+            tum_yeni_kayitlar, bulunamayan_kategoriler, toplam_pdf_bulunan, basarisiz_indirme_sayisi
+        )
     except Exception as e:
         print(f"✗ Bildirim gönderiminde hata: {str(e)[:80]}")
 
