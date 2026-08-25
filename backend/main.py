@@ -30,9 +30,9 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from types import SimpleNamespace
 from urllib.parse import quote
-from fastapi import Depends, FastAPI, Form, Header, HTTPException, Query, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, Form, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -844,6 +844,20 @@ def admin_manifest():
             {"src": "/statik/admin/icon-1024.png", "sizes": "1024x1024", "type": "image/png", "purpose": "maskable"},
         ],
     }
+
+
+@app.post("/api/admin/bot-simdi-tara")
+def admin_bot_simdi_tara(background_tasks: BackgroundTasks, _giris=Depends(admin_girisini_dogrula)):
+    """2026-08-25 GEÇİCİ UÇ (kaldırılacak): cetatenie.just.ro günlerdir
+    servis dışıydı, bugünkü 09:00 taraması site hâlâ kapalıyken çalışıp
+    0 PDF ile boşa gitti. Site taramadan SONRA tekrar açıldı -- kullanıcının
+    bilinçli, tek seferlik manuel tetikleme kararı (AGENTS.md'deki "günde
+    sadece 1 kez" kuralı otomatik/sık polling'i yasaklıyor, bugünkü TEK
+    otomatik deneme zaten başarısız olduğu için bu ikinci bir otomatik
+    deneme değil, bilinçli manuel istisna). Arka planda çalışır (BackgroundTasks),
+    isteği hemen 202 ile döner -- botu_calistir() dakikalarca sürebilir."""
+    background_tasks.add_task(run_bot)
+    return JSONResponse({"durum": "baslatildi"}, status_code=202)
 
 
 @app.get("/api/admin/bugunun-durumu", response_class=HTMLResponse)
