@@ -470,7 +470,8 @@ def _b_plani_devreye_al(page, tip, alt_kategori, http_oturum, kontrol_conn):
     return indirilen_sayisi, kaydedilen_kayit, yeni_kayitlar
 
 
-def _bildirimleri_gonder(tum_yeni_kayitlar, bulunamayan_kategoriler, toplam_pdf_bulunan, basarisiz_indirme_sayisi=0):
+def _bildirimleri_gonder(tum_yeni_kayitlar, bulunamayan_kategoriler, toplam_pdf_bulunan,
+                          basarisiz_indirme_sayisi=0, kalici_eksik_sayisi=0):
     # 1) Genel duyuru: yeni kayıt varsa TÜM kullanıcılara bildirim.
     if tum_yeni_kayitlar:
         tokenlar = _tum_push_tokenlari()
@@ -527,8 +528,22 @@ def _bildirimleri_gonder(tum_yeni_kayitlar, bulunamayan_kategoriler, toplam_pdf_
     if basarisiz_indirme_sayisi >= 3:
         admin_kritik_uyari(
             f"{basarisiz_indirme_sayisi} PDF indirme denemesi başarısız oldu "
-            "(dosyalar bulundu ama indirilemedi) -- WAF/erişim engeli "
-            "olabilir, kontrol et."
+            "(dosyalar bulundu ama indirilemedi, HTTP 404 hariç) -- WAF/erişim "
+            "engeli olabilir, kontrol et."
+        )
+
+    # 2026-08-26: gerçek HTTP 404'ler (WAF DEĞİL, kaynak sitede dosya kalıcı
+    # olarak yok -- bkz. .404 işaret dosyası notu) admin'e panik uyarısı
+    # olarak DEĞİL, bilgilendirici bir not olarak gidiyor -- her taramada
+    # tekrar denenmeyecekleri için bu mesaj da SADECE İLK KEZ karşılaşıldığı
+    # gün gidecek (kalici_eksik_sayisi ancak yeni bir .404 dosyası
+    # OLUŞTUĞUNDA >0 olur, zaten işaretli dosyalar sessizce atlanıyor).
+    if kalici_eksik_sayisi > 0:
+        admin_kritik_uyari(
+            f"Bilgi: {kalici_eksik_sayisi} PDF, cetatenie.just.ro'nun kendi "
+            "sitesinde linki duruyor ama sunucudan kaldırılmış (gerçek HTTP "
+            "404, WAF değil). Kalıcı olarak 'eksik' işaretlendi, bir daha "
+            "denenmeyecek -- işlem gerekmiyor."
         )
 
 
@@ -548,6 +563,11 @@ def botu_calistir():
     # (dosya diskte yoktu, indirme denendi, 200/geçerli boyut alınamadı ya da
     # exception oluştu) burada sayılıyor -- bkz. _bildirimleri_gonder.
     basarisiz_indirme_sayisi = 0
+    # 2026-08-26: GERÇEK HTTP 404 (kaynak sitede dosya kalıcı olarak yok)
+    # basarisiz_indirme_sayisi'nden AYRI sayılıyor -- bu bir WAF/erişim
+    # sorunu değil, cetatenie.just.ro'nun kendi arşiv tutarsızlığı; admin
+    # uyarısının yanlış "WAF/erişim engeli" teşhisi koymaması için.
+    kalici_eksik_sayisi = 0
 
     http_oturum = _http_oturumu_olustur()
 
@@ -749,9 +769,29 @@ def botu_calistir():
                             continue
 
                         hedef_yol = os.path.join(klasor_yolu, dosya_adi)
+                        kalici_eksik_isareti = hedef_yol + ".404"
                         gercek_indirme_oldu = False
 
-                        if not os.path.exists(hedef_yol):
+                        # 2026-08-26 KÖK NEDEN DÜZELTMESİ (canlı Render
+                        # loglarıyla kanıtlandı): "3 PDF indirme denemesi
+                        # başarısız" admin uyarısı yanlış teşhis koyuyordu --
+                        # WAF/erişim engeli SANILAN 3 dosya, aslında
+                        # cetatenie.just.ro'nun KENDİ sitesinde linki hâlâ
+                        # duruyor ama dosyanın kendisi sunucudan kaldırılmış
+                        # (gerçek HTTP 404, tarayıcıda canlı doğrulandı --
+                        # WAF'ın 503 "Verifying your browser..." sayfasından
+                        # FARKLI, kesin bir "kaynak sitede yok" sinyali).
+                        # Bu düzeltmeden önce kod her taramada aynı 404'lük
+                        # dosyayı YENİDEN deniyordu (hedef_yol hiç oluşmadığı
+                        # için os.path.exists hep False kalıyordu) -- hem
+                        # gereksiz ağ isteği hem her gün tekrarlayan yanlış
+                        # "WAF" uyarısı üretiyordu. Artık 404 alınan dosyalar
+                        # küçük bir işaret dosyasıyla (.404) kalıcı olarak
+                        # işaretleniyor, bir sonraki taramada hiç denenmeden
+                        # atlanıyor.
+                        if os.path.exists(kalici_eksik_isareti):
+                            print(f"      ⊘ Bilinen eksik (kaynak sitede 404), atlanıyor: {dosya_adi}")
+                        elif not os.path.exists(hedef_yol):
                             gercek_indirme_oldu = True
                             try:
                                 print(f"      ⬇ İndiriliyor: {dosya_adi}")
@@ -797,8 +837,18 @@ def botu_calistir():
                                     tum_yeni_kayitlar.extend(yeni)
                                     indirilen += 1
                                     print(f"      ✓ Kaydedildi: {dosya_adi}")
+                                elif pdf_res.status == 404:
+                                    # 2026-08-26: gerçek HTTP 404 -- WAF değil,
+                                    # kaynak sitenin KENDİSİNDE link duruyor ama
+                                    # dosya sunucudan kaldırılmış. Kalıcı olarak
+                                    # işaretleyip bir daha denemiyoruz (bkz.
+                                    # yukarıdaki kalici_eksik_isareti notu).
+                                    with open(kalici_eksik_isareti, "w", encoding="utf-8") as f:
+                                        f.write(href)
+                                    kalici_eksik_sayisi += 1
+                                    print(f"      ⊘ Kaynak sitede 404 (kalıcı eksik işaretlendi): {dosya_adi}")
                                 else:
-                                    print(f"      ✗ Geçersiz: {dosya_adi}")
+                                    print(f"      ✗ Geçersiz (durum={pdf_res.status}): {dosya_adi}")
                                     basarisiz_indirme_sayisi += 1
 
                             except Exception as e:
@@ -920,7 +970,8 @@ def botu_calistir():
 
     try:
         _bildirimleri_gonder(
-            tum_yeni_kayitlar, bulunamayan_kategoriler, toplam_pdf_bulunan, basarisiz_indirme_sayisi
+            tum_yeni_kayitlar, bulunamayan_kategoriler, toplam_pdf_bulunan,
+            basarisiz_indirme_sayisi, kalici_eksik_sayisi
         )
     except Exception as e:
         print(f"✗ Bildirim gönderiminde hata: {str(e)[:80]}")
