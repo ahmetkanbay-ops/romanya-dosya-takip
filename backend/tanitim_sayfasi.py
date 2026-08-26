@@ -254,7 +254,6 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
   <h1>Romanya Dosya Takip</h1>
   <p class="slogan">Romanya vatandaşlığı başvurunuzun Stadiu Dosar ve Ordine durumunu saniyeler içinde sorgulayın -- onaylandığında otomatik bildirim alın.</p>
   {magaza_html}
-  {istatistik_html}
 </header>
 
 <div class="kapsayici">
@@ -271,6 +270,7 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
     <div class="karusel-noktalar">
       {karusel_nokta_html}
     </div>
+    {istatistik_html}
   </section>
 
   <section>
