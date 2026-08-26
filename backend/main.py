@@ -612,16 +612,29 @@ def root():
     "web sitesi" alanına girilebilir. Mobil uygulamanın kullandığı sağlık
     kontrolü BAŞKA bir adreste (/api/durum), bu değişiklik ona dokunmuyor.
 
-    Rakamlar varsa (genel istatistik önbelleği zaten hesaplanmışsa)
-    gösterilir -- yoksa (ör. sunucu daha yeni başladıysa) o bölüm sessizce
-    atlanır, sayfa yine de tam çalışır (her istekte DB'ye gitmeden).
+    2026-08-26 DÜZELTMESİ: Önceden bu fonksiyon önbelleği SADECE okuyordu --
+    doldurma işi tamamen /api/istatistikler/genel'i çağıran mobil uygulama
+    trafiğine bağlıydı. Kapalı test aşamasında mobil kullanıcı sayısı çok
+    az olduğu için önbellek her sunucu yeniden başlatmasından (deploy)
+    sonra SAATLERCE boş kalıyordu -- kullanıcı web sayfasını her
+    yenilediğinde rakamları hiç göremiyordu. Artık /api/istatistikler/genel
+    ile AYNI önbelleği, AYNI TTL mantığıyla (30dk) burada da dolduruyoruz --
+    ilk istek (ya da 30dk'da bir) hafif bir DB gecikmesi (yerelde <2sn,
+    ana_kategori+yil kapsayan idx_dosya_ana_norm_yil indeksi sayesinde)
+    pahasına, rakamlar artık sunucu yeniden başlasa bile ilk ziyaretçide
+    dolduruluyor.
     """
-    onbellek = _genel_istatistik_onbellek.get("veri")
-    if onbellek:
+    simdi = time.time()
+    onbellek = _genel_istatistik_onbellek
+    if onbellek["veri"] is None or (simdi - onbellek["zaman"]) > _ISTATISTIK_ONBELLEK_SURESI_SN:
+        onbellek["veri"] = _genel_istatistikleri_hesapla()
+        onbellek["zaman"] = simdi
+    veri = onbellek["veri"]
+    if veri:
         return tanitim_sayfasi_html(
-            toplam_stadiu=onbellek["toplam_stadiu"],
-            toplam_onay=onbellek["toplam_onaylanan"],
-            toplam_bekleyen=onbellek["toplam_bekleyen"],
+            toplam_stadiu=veri["toplam_stadiu"],
+            toplam_onay=veri["toplam_onaylanan"],
+            toplam_bekleyen=veri["toplam_bekleyen"],
         )
     return tanitim_sayfasi_html()
 
