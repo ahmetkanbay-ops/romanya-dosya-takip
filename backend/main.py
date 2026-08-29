@@ -1025,6 +1025,12 @@ def admin_push_test_gonder(_giris=Depends(admin_girisini_dogrula)):
                     data=veri,
                     vapid_private_key=VAPID_OZEL_ANAHTAR,
                     vapid_claims={"sub": VAPID_ILETISIM_EPOSTA},
+                    # 2026-08-30: Urgency olmadan push servisi (FCM) mesaji
+                    # pil tasarrufu icin erteleyebiliyor -- kullanici testte
+                    # "sayfayi yenilemeden bildirim gelmiyor" diye bildirdi.
+                    # "high" ile push servisine "hemen teslim et, erteleme"
+                    # sinyali veriliyor (RFC 8030 Urgency header).
+                    headers={"Urgency": "high"},
                     timeout=10,
                 )
                 gonderildi += 1
