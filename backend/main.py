@@ -79,7 +79,10 @@ from hukuki_metinler import (
     GIZLILIK_POLITIKASI_METIN,
     sayfa_html,
 )
-from admin_panel import metrikleri_hesapla, admin_sayfa_html, admin_giris_html, bugunun_durumu_html_getir
+from admin_panel import (
+    metrikleri_hesapla, admin_sayfa_html, admin_giris_html,
+    bugunun_durumu_html_getir, bugunun_durumu_verisini_getir,
+)
 from tanitim_sayfasi import tanitim_sayfasi_html
 
 RESMI_LISTE_URL = "https://cetatenie.just.ro/"
@@ -111,6 +114,25 @@ def app_anahtarini_dogrula(x_app_key: Optional[str] = Header(default=None)):
     # attack) açıktır -- compare_digest sabit sürede karşılaştırır.
     if APP_API_KEY and not secrets.compare_digest(x_app_key or "", APP_API_KEY):
         raise HTTPException(status_code=401, detail="Geçersiz uygulama anahtarı")
+    return True
+
+
+# 2026-08-30 (Gece Nobeti -- Faz 0): GitHub Actions gibi bir zamanlayici
+# admin oturum cerezini TUTAMAZ (tarayici degil, giris ekranindan gecemez)
+# -- bu yuzden admin_girisini_dogrula'dan AYRI, statik bir anahtar. Ayni
+# app_anahtarini_dogrula deseni: fail-closed (anahtar ayarli degilse uc
+# 503 doner), sabit-sureli karsilastirma.
+NOBETCI_ANAHTARI = os.environ.get("NOBETCI_ANAHTARI")
+
+
+def nobetci_anahtarini_dogrula(x_nobetci_anahtar: Optional[str] = Header(default=None)):
+    if not NOBETCI_ANAHTARI:
+        raise HTTPException(
+            status_code=503,
+            detail="Nobetci ucu devre disi: NOBETCI_ANAHTARI ayarlanmamis.",
+        )
+    if not secrets.compare_digest(x_nobetci_anahtar or "", NOBETCI_ANAHTARI):
+        raise HTTPException(status_code=401, detail="Gecersiz nobetci anahtari")
     return True
 
 
@@ -879,6 +901,36 @@ def admin_bugunun_durumu(_giris=Depends(admin_girisini_dogrula)):
         return bugunun_durumu_html_getir(conn, _son_basarili_tarama_oku())
     finally:
         conn.close()
+
+
+@app.get("/api/admin/saglik-kontrolu")
+def admin_saglik_kontrolu(_yetki=Depends(nobetci_anahtarini_dogrula)):
+    """Gece Nobeti (7/24 izleme, 2026-08-30) icin makineler-arasi saglik
+    ucu -- admin oturum cerezi DEGIL, ayri bir statik anahtar
+    (NOBETCI_ANAHTARI) ister, cunku GitHub Actions gibi bir zamanlayici
+    tarayici oturumu tutamaz. bugunun_durumu_html_getir ile AYNI veriyi
+    (bugunun_durumu_verisini_getir uzerinden) JSON olarak dondurur --
+    Faz 2'de GitHub Actions bu ucu duzenli araliklarla cagirip durum
+    degisikliginde (iyi -> uyari/hata) push bildirimi tetikleyecek."""
+    conn = veritabani_baglantisi(DB_FILE)
+    try:
+        durumlar = bugunun_durumu_verisini_getir(conn, _son_basarili_tarama_oku())
+    finally:
+        conn.close()
+
+    genel_durum = "iyi"
+    for d in durumlar:
+        if d["durum"] == "hata":
+            genel_durum = "hata"
+            break
+        if d["durum"] == "uyari":
+            genel_durum = "uyari"
+
+    return {
+        "genel_durum": genel_durum,
+        "kontroller": durumlar,
+        "zaman": datetime.now(ROMANYA_SAAT_DILIMI).isoformat(),
+    }
 
 
 def _yerel_pdf_url_olustur(request: Request, row) -> Optional[str]:

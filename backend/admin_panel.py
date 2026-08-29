@@ -217,6 +217,22 @@ def bugunun_durumunu_getir(son_basarili_tarama, son_tarama_detay):
     return sonuc
 
 
+def bugunun_durumu_verisini_getir(conn, son_basarili_tarama):
+    """bugunun_durumunu_getir() icin son_tarama_detay'i veritabanindan
+    okuyup ham liste (HTML'e SARILMAMIS) olarak dondurur -- hem
+    bugunun_durumu_html_getir (admin sayfasi) hem de Gece Nobeti'nin
+    /api/admin/saglik-kontrolu ucu (main.py, 2026-08-30 EKLENTISI) bunu
+    ortak kullaniyor, DB sorgusu iki yerde tekrarlanmasin diye."""
+    c = conn.cursor()
+    c.execute(
+        "SELECT detay FROM sistem_olaylari WHERE olay_tipi='tarama_tamamlandi' "
+        "ORDER BY zaman DESC LIMIT 1"
+    )
+    satir = c.fetchone()
+    son_tarama_detay = satir[0] if satir else None
+    return bugunun_durumunu_getir(son_basarili_tarama, son_tarama_detay)
+
+
 def bugunun_durumu_html_getir(conn, son_basarili_tarama):
     """2026-08-22: /admin sayfasının kendisi ARTIK bunu çağırmıyor -- 4 dış
     servise (Render/Sentry/B2/GitHub) atılan canlı istekler onlarca saniye
@@ -225,14 +241,7 @@ def bugunun_durumu_html_getir(conn, son_basarili_tarama):
     ANINDA açılıyor, bu fonksiyon ayrı bir uç noktadan (/api/admin/
     bugunun-durumu) sayfa yüklendikten SONRA, tarayıcıdan JS ile çağrılıyor
     -- kullanıcı bekleme hissetmiyor, veri geldiğinde yerine oturuyor."""
-    c = conn.cursor()
-    c.execute(
-        "SELECT detay FROM sistem_olaylari WHERE olay_tipi='tarama_tamamlandi' "
-        "ORDER BY zaman DESC LIMIT 1"
-    )
-    satir = c.fetchone()
-    son_tarama_detay = satir[0] if satir else None
-    durumlar = bugunun_durumunu_getir(son_basarili_tarama, son_tarama_detay)
+    durumlar = bugunun_durumu_verisini_getir(conn, son_basarili_tarama)
     return _bugunun_durumu_html(durumlar)
 
 
