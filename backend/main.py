@@ -137,6 +137,14 @@ ADMIN_SIFRE = os.environ.get("ADMIN_SIFRE")
 ADMIN_OTURUM_ANAHTARI = os.environ.get("ADMIN_OTURUM_ANAHTARI")
 ADMIN_OTURUM_COOKIE_ADI = "admin_oturum"
 ADMIN_OTURUM_GECERLILIK_SN = 90 * 24 * 60 * 60  # 90 gün
+# secure=True cerez sadece HTTPS uzerinden taraniyorsa tarayicida saklanir --
+# Render'da (RENDER=true, otomatik ayarli) HTTPS var, sorun yok. Ama yerel
+# gelistirmede panel http://192.168.x.x:10000 (LAN IP, duz HTTP) uzerinden
+# aciliyor -- tarayici boyle bir baglantida Secure cerezi SESSIZCE reddediyor,
+# giris basarili gorunuyor (303 /admin'e donuyor) ama cerez hic tutmuyor,
+# /admin tekrar /admin/giris'e atiyor ("sayfaya etki etmiyor" hissi buradan
+# geliyordu). Bu yuzden secure bayragini ortama gore ayarliyoruz.
+ADMIN_OTURUM_COOKIE_SECURE = os.environ.get("RENDER") is not None
 
 
 def _admin_oturum_imzala(son_gecerlilik_ts: int) -> str:
@@ -824,7 +832,7 @@ def admin_giris_gonder(
         value=_admin_oturum_imzala(son_gecerlilik_ts),
         max_age=ADMIN_OTURUM_GECERLILIK_SN,
         httponly=True,
-        secure=True,
+        secure=ADMIN_OTURUM_COOKIE_SECURE,
         samesite="lax",
         path="/",
     )
