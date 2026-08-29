@@ -32,13 +32,19 @@
     return dizi;
   }
 
+  // 2026-08-30 DUZELTMESI: izin butonu abonelik varken artik GIZLENMIYOR --
+  // yerine "Bildirimi Yenile"ye donusuyor. Once tamamen gizleniyordu, ama
+  // tarayicida "abonelik var" gorunup backend'de geçersiz sayilip
+  // silinmis (404/410, ornegin telefon pil ayarlari degistirilirken)
+  // durumlarda kullanicinin yeniden abone olabilecegi bir yol kalmiyordu
+  // (canli testte Oppo/ColorOS'ta tam boyle oldu).
   function mevcutAbonelikVarMi() {
     return navigator.serviceWorker.register('/admin/sw.js')
       .then(function (kayit) { return kayit.pushManager.getSubscription(); })
       .then(function (abonelik) {
         if (abonelik) {
           durumGoster('✅', 'Bu cihaz bildirim almak üzere kayıtlı.');
-          izinButonu.style.display = 'none';
+          izinButonu.textContent = 'Bildirimi Yenile';
           testButonu.style.display = 'inline-block';
         } else if (Notification.permission === 'denied') {
           durumGoster('🚫', 'Bildirim izni reddedilmiş -- tarayıcı ayarlarından açmanız gerekir.');
@@ -65,9 +71,20 @@
           return Promise.reject('vapid-yok');
         }
         return navigator.serviceWorker.register('/admin/sw.js').then(function (kayit) {
-          return kayit.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: base64UrlToUint8Array(veri.genel_anahtar),
+          // 2026-08-30 DUZELTMESI: mevcut ama backend tarafinda gecersiz
+          // sayilip silinmis (404/410) bir abonelik varsa, subscribe()
+          // tarayicida hala "var" gorunen O ESKI/OLU aboneligi aynen geri
+          // dondurup yeni bir tane OLUSTURMUYOR -- kullanicida "kayitli"
+          // yaziyor ama bildirim hic gelmiyordu (canli testte yakalandi,
+          // Oppo/ColorOS'ta pil ayari degisikligi sonrasi). Once varsa
+          // eskisini unsubscribe edip GERCEKTEN taze bir abonelik aliyoruz.
+          return kayit.pushManager.getSubscription().then(function (eski) {
+            return eski ? eski.unsubscribe() : null;
+          }).then(function () {
+            return kayit.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: base64UrlToUint8Array(veri.genel_anahtar),
+            });
           });
         });
       })
@@ -86,7 +103,8 @@
       .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
       .then(function () {
         durumGoster('✅', 'Bildirimler açıldı, bu cihaz kayıtlı.');
-        izinButonu.style.display = 'none';
+        izinButonu.textContent = 'Bildirimi Yenile';
+        izinButonu.disabled = false;
         testButonu.style.display = 'inline-block';
       })
       .catch(function (hata) {
@@ -113,7 +131,7 @@
         if (sonuc.gonderildi > 0) {
           durumGoster('✅', 'Test bildirimi gönderildi -- telefonunuzu kontrol edin.');
         } else {
-          durumGoster('⚠️', 'Gönderilemedi (kayıtlı abonelik kalmamış olabilir).');
+          durumGoster('⚠️', 'Gönderilemedi -- abonelik geçersiz olmuş olabilir, "Bildirimi Yenile"ye basıp tekrar deneyin.');
         }
       })
       .catch(function () {
