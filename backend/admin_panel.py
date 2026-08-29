@@ -663,6 +663,12 @@ def admin_sayfa_html(m):
   .durum-ad {{ font-weight: 700; color: var(--lacivert-koyu); min-width: 150px; }}
   .durum-mesaj {{ color: var(--metin-ikincil); }}
 
+  .nobetci-buton {{
+    padding: 9px 16px; border: none; border-radius: 8px; background: var(--altin);
+    color: var(--lacivert-koyu); font-weight: 700; font-size: 13px; cursor: pointer;
+  }}
+  .nobetci-buton:disabled {{ opacity: .5; cursor: default; }}
+
   footer.altbilgi {{ text-align: center; font-size: 11.5px; color: var(--metin-ikincil); margin-top: 30px; }}
 </style>
 </head>
@@ -689,6 +695,20 @@ def admin_sayfa_html(m):
        sonsuza kadar "Yükleniyor…"da kalıyordu. Aynı kökenden servis edilen
        ayrı bir dosyaya taşındı (bkz. statik/admin/bugunun-durumu.js). -->
   <script src="/statik/admin/bugunun-durumu.js"></script>
+
+  <div class="bolum">
+    <p class="bolum-baslik">🔦 Gece Nöbeti Bildirimleri</p>
+    <div id="nobetci-push-durum" class="durum-satir" style="border-left-color:#9aa3b2">
+      <span class="durum-ikon">⏳</span>
+      <span class="durum-mesaj">Kontrol ediliyor…</span>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+      <button id="nobetci-push-izin-buton" class="nobetci-buton">Bildirimlere İzin Ver</button>
+      <button id="nobetci-push-test-buton" class="nobetci-buton" style="display:none">Test Bildirimi Gönder</button>
+    </div>
+  </div>
+  <!-- bugunun-durumu.js'teki CSP notuyla aynı sebepten ayrı dosya. -->
+  <script src="/statik/admin/nobetci-push.js"></script>
 
   <div class="bolum">
     <p class="bolum-baslik">Kullanıcılar</p>

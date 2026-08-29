@@ -662,6 +662,24 @@ def tabloyu_hazirla(conn):
     # hızlanıyordu, "durum" için ayrı bir indeks yoktu.
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_dosya_durum ON dosyalar(durum)")
 
+    # 2026-08-30 EKLENTİSİ (Gece Nöbeti -- Faz 1): admin panelinin (PWA)
+    # tarayıcı-native Web Push aboneliklerini tutar. push_tokenlari
+    # tablosuyla KARIŞTIRMAMALI -- o, mobil uygulamanın Expo push
+    # token'ları için (kullanıcılara "favori onaylandı" bildirimi), bu ise
+    # SADECE proje sahibinin admin panelini "ana ekrana eklediği"
+    # cihaz(lar)ı için ayrı bir mekanizma (Web Push API, VAPID anahtarları).
+    # endpoint tarayıcının push servisine özgü URL'dir, bir cihaz+tarayıcı
+    # kurulumunu benzersiz tanımlar -- UNIQUE bu yüzden.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS nobetci_push_abonelikleri (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            endpoint TEXT NOT NULL UNIQUE,
+            p256dh TEXT NOT NULL,
+            auth TEXT NOT NULL,
+            olusturma_tarihi TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     conn.commit()
 
 

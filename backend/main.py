@@ -20,6 +20,7 @@ except Exception:
 
 import hashlib
 import hmac
+import json
 import re
 import secrets
 import sqlite3
@@ -79,6 +80,7 @@ from hukuki_metinler import (
     GIZLILIK_POLITIKASI_METIN,
     sayfa_html,
 )
+from pywebpush import webpush, WebPushException
 from admin_panel import (
     metrikleri_hesapla, admin_sayfa_html, admin_giris_html,
     bugunun_durumu_html_getir, bugunun_durumu_verisini_getir,
@@ -123,6 +125,15 @@ def app_anahtarini_dogrula(x_app_key: Optional[str] = Header(default=None)):
 # app_anahtarini_dogrula deseni: fail-closed (anahtar ayarli degilse uc
 # 503 doner), sabit-sureli karsilastirma.
 NOBETCI_ANAHTARI = os.environ.get("NOBETCI_ANAHTARI")
+
+# 2026-08-30 (Gece Nobeti -- Faz 1): admin panelinin (PWA) tarayici-native
+# Web Push bildirimleri icin VAPID anahtar cifti. OZEL anahtar SIR (Render'da
+# ayarli), GENEL anahtar tarayiciya /api/admin/push-genel-anahtar ile
+# gonderilir (gizli degil, ama ikisi ESLENMIS bir cift -- ayri ayri
+# degistirilmemeli, biri degisirse mevcut abonelikler gecersiz kalir).
+VAPID_OZEL_ANAHTAR = os.environ.get("VAPID_OZEL_ANAHTAR")
+VAPID_GENEL_ANAHTAR = os.environ.get("VAPID_GENEL_ANAHTAR")
+VAPID_ILETISIM_EPOSTA = os.environ.get("VAPID_ILETISIM_EPOSTA")
 
 
 def nobetci_anahtarini_dogrula(x_nobetci_anahtar: Optional[str] = Header(default=None)):
@@ -887,6 +898,149 @@ def admin_manifest():
             {"src": "/statik/admin/icon-1024.png", "sizes": "1024x1024", "type": "image/png", "purpose": "maskable"},
         ],
     }
+
+
+@app.get("/admin/sw.js")
+def admin_service_worker():
+    """2026-08-30 (Gece Nobeti -- Faz 1): Web Push almak icin sart olan
+    service worker. /admin altinda servis ediliyor ki push kapsami (scope)
+    manifest.json'daki "/admin" ile eslessin -- /statik altinda olsaydı
+    varsayilan kapsami /statik/admin/ olurdu, /admin sayfasini KAPSAMAZDI.
+    Sir icermez, kimlik dogrulama gerekmiyor (manifest.json ile ayni mantik).
+    """
+    icerik = """
+self.addEventListener('push', function (olay) {
+  var veri = {};
+  try { veri = olay.data ? olay.data.json() : {}; } catch (e) { veri = {}; }
+  var baslik = veri.baslik || 'Romanya Dosya Takip';
+  var secenekler = {
+    body: veri.govde || '',
+    icon: '/statik/admin/icon-1024.png',
+    badge: '/statik/admin/icon-1024.png',
+    tag: veri.etiket || 'nobetci',
+    data: { url: veri.url || '/admin' },
+  };
+  olay.waitUntil(self.registration.showNotification(baslik, secenekler));
+});
+
+self.addEventListener('notificationclick', function (olay) {
+  olay.notification.close();
+  var hedefUrl = (olay.notification.data && olay.notification.data.url) || '/admin';
+  olay.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (pencereler) {
+      for (var i = 0; i < pencereler.length; i++) {
+        if (pencereler[i].url.indexOf(hedefUrl) !== -1 && 'focus' in pencereler[i]) {
+          return pencereler[i].focus();
+        }
+      }
+      if (clients.openWindow) return clients.openWindow(hedefUrl);
+    })
+  );
+});
+"""
+    return Response(content=icerik, media_type="application/javascript")
+
+
+@app.get("/api/admin/push-genel-anahtar")
+def admin_push_genel_anahtar(_giris=Depends(admin_girisini_dogrula)):
+    """Faz 1: tarayicinin PushManager.subscribe({applicationServerKey: ...})
+    cagrisi icin VAPID genel anahtarini doner. Genel anahtar SIR degil ama
+    admin oturumu arkasinda tutuluyor -- panel disina hicbir sey acik
+    olmasin diye (defense in depth, zorunlu degil)."""
+    if not VAPID_GENEL_ANAHTAR:
+        return {"etkin": False, "genel_anahtar": None}
+    return {"etkin": True, "genel_anahtar": VAPID_GENEL_ANAHTAR}
+
+
+class NobetciPushAbonelikIstegi(BaseModel):
+    """2026-08-30 (Gece Nobeti -- Faz 1): tarayicinin PushManager.subscribe()
+    cagrisindan donen PushSubscription nesnesinin JSON hali -- endpoint
+    tarayicinin push servisine ait benzersiz URL, p256dh/auth ise sifreleme
+    icin gereken anahtarlar (bkz. nobetci_push_abonelikleri tablosu).
+    ONEMLI: bu sinif, onu kullanan route'tan ONCE tanimli olmali -- Python
+    3.14'te (PEP 649, lazy annotations) tanim SONRA gelirse FastAPI modeli
+    coz(e)meyip parametreyi SESSIZCE query parametresine cevirip 422
+    donuyordu (2026-08-30'da canli testte yakalandi)."""
+    endpoint: str = Field(max_length=2000)
+    p256dh: str = Field(max_length=300)
+    auth: str = Field(max_length=300)
+
+
+@app.post("/api/admin/push-abone-ol")
+def admin_push_abone_ol(istek: NobetciPushAbonelikIstegi, _giris=Depends(admin_girisini_dogrula)):
+    """Faz 1: tarayicidan gelen PushSubscription'i kaydeder. Ayni endpoint
+    tekrar abone olursa (ör. anahtar yenilendi) INSERT OR REPLACE ile
+    guncellenir -- endpoint UNIQUE oldugu icin eski satirin uzerine yazar."""
+    conn = veritabani_baglantisi(DB_FILE)
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO nobetci_push_abonelikleri (endpoint, p256dh, auth) "
+            "VALUES (?, ?, ?)",
+            (istek.endpoint, istek.p256dh, istek.auth),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return {"basarili": True}
+
+
+@app.post("/api/admin/push-test-gonder")
+def admin_push_test_gonder(_giris=Depends(admin_girisini_dogrula)):
+    """Faz 1: kayitli tum aboneliklere bir test bildirimi gonderir --
+    Faz 1'in "gercekten telefonuma ulasiyor mu" kanitidir. 410/404 donen
+    (kullanici bildirimleri kapatmis/uygulamayi kaldirmis) abonelikler
+    kalici olarak gecersiz sayilir ve tablodan silinir."""
+    if not (VAPID_OZEL_ANAHTAR and VAPID_ILETISIM_EPOSTA):
+        raise HTTPException(status_code=503, detail="VAPID anahtarlari ayarlanmamis.")
+
+    conn = veritabani_baglantisi(DB_FILE, row_factory=sqlite3.Row)
+    try:
+        satirlar = conn.execute(
+            "SELECT id, endpoint, p256dh, auth FROM nobetci_push_abonelikleri"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    if not satirlar:
+        return {"gonderildi": 0, "silindi": 0, "basarisiz": 0, "detay": "Kayitli abonelik yok."}
+
+    veri = json.dumps({
+        "baslik": "🔦 Gece Nöbeti — test bildirimi",
+        "govde": "Bu bildirimi görüyorsanız Web Push altyapısı çalışıyor.",
+        "etiket": "nobetci-test",
+        "url": "/admin",
+    })
+
+    gonderildi = silindi = basarisiz = 0
+    conn = veritabani_baglantisi(DB_FILE)
+    try:
+        for satir in satirlar:
+            abonelik_bilgisi = {
+                "endpoint": satir["endpoint"],
+                "keys": {"p256dh": satir["p256dh"], "auth": satir["auth"]},
+            }
+            try:
+                webpush(
+                    subscription_info=abonelik_bilgisi,
+                    data=veri,
+                    vapid_private_key=VAPID_OZEL_ANAHTAR,
+                    vapid_claims={"sub": VAPID_ILETISIM_EPOSTA},
+                    timeout=10,
+                )
+                gonderildi += 1
+            except WebPushException as e:
+                durum_kodu = e.response.status_code if e.response is not None else None
+                if durum_kodu in (404, 410):
+                    conn.execute("DELETE FROM nobetci_push_abonelikleri WHERE id = ?", (satir["id"],))
+                    silindi += 1
+                else:
+                    basarisiz += 1
+                    print(f"! Nobetci push gonderilemedi (id={satir['id']}): {e}")
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {"gonderildi": gonderildi, "silindi": silindi, "basarisiz": basarisiz}
 
 
 @app.get("/api/admin/bugunun-durumu", response_class=HTMLResponse)
