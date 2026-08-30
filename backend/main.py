@@ -461,7 +461,29 @@ def b2_yedegini_yukle(yerel_dosya_yolu):
         )
         dosya_adi = os.path.basename(yerel_dosya_yolu)
         anahtar = f"veritabani-yedekleri/{dosya_adi}"
-        s3.upload_file(yerel_dosya_yolu, B2_BUCKET_ADI, anahtar)
+
+        # 2026-08-30 DUZELTMESI: 30 Agustos gecesi "Connection was closed
+        # before we received a valid response" hatasiyla yedekleme TEK
+        # denemede basarisiz oldu ve boyle raporlandi -- upload_file'da hic
+        # retry yoktu, gecici bir ag kesintisi butun geceyi "basarisiz"
+        # sayiyordu. Simdi 3 deneme, aralarinda artan bekleme (5sn/15sn) --
+        # her Backblaze/B2 aginin GECICI bir kesintisi butun geceyi
+        # kaybettirmesin diye. cetatenie.just.ro'ya sıklık artirmiyoruz
+        # (o kural hala gecerli) -- bu SADECE bizim Backblaze baglantimiz.
+        son_hata = None
+        for deneme in range(1, 4):
+            try:
+                s3.upload_file(yerel_dosya_yolu, B2_BUCKET_ADI, anahtar)
+                son_hata = None
+                break
+            except Exception as e:
+                son_hata = e
+                if deneme < 3:
+                    bekleme = 5 * deneme
+                    print(f"⚠️  B2 yükleme denemesi {deneme}/3 başarısız ({str(e)[:80]}), {bekleme}sn sonra tekrar...")
+                    time.sleep(bekleme)
+        if son_hata is not None:
+            raise son_hata
         print(f"✓ Bulut (B2) yedeği yüklendi: {anahtar}")
 
         silinen = []
