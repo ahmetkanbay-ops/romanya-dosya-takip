@@ -1063,6 +1063,17 @@ def admin_bugunun_durumu(_giris=Depends(admin_girisini_dogrula)):
         conn.close()
 
 
+@app.get("/api/admin/_gecici_telegram_test")
+def _gecici_telegram_test(_yetki=Depends(nobetci_anahtarini_dogrula)):
+    """2026-08-30 GECICI TESHIS UCU -- production'da yeni ayarlanan
+    TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID'nin gercekten yuklendigini/calistigini
+    dogrulamak icin. Dogrulama biter bitmez KALDIRILACAK (bkz. AGENTS.md
+    'sadece canlida test edilebilir sey' deseni)."""
+    from bildirim import telegram_gonder
+    telegram_gonder("Gece Nobeti -- production teshis testi (bu ucu az sonra kaldiracagim).")
+    return {"denendi": True}
+
+
 @app.get("/api/admin/saglik-kontrolu")
 def admin_saglik_kontrolu(_yetki=Depends(nobetci_anahtarini_dogrula)):
     """Gece Nobeti (7/24 izleme, 2026-08-30) icin makineler-arasi saglik
