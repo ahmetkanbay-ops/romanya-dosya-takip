@@ -226,8 +226,19 @@ def admin_girisini_dogrula(request: Request):
 # henüz kurulmamışsa (requirements.txt güncellenmiş ama pip install
 # çalıştırılmamışsa) da uygulama yine ayağa kalkar, sadece izleme kapalı
 # kalır -- diğer opsiyonel bağımlılıklarla (slowapi) aynı desen.
+#
+# 2026-08-30 DÜZELTMESİ: SENTRY_DSN yanlışlıkla yerel .env'de de tanımlıydı
+# -- yukarıdaki yorumun varsaydığının aksine, bu da yerel `python main.py`
+# çalıştırmalarının (bu oturumda onlarca kez oldu) canlı Sentry projesine
+# RAPOR VERMESİNE yol açıyordu (kanıt: Sentry'de Windows'a özgü
+# "ConnectionResetError [WinError 10054]" hatası bulundu -- Render Linux'ta
+# bu hata TÜRÜ oluşamaz). Artık DSN ayarlı olsa bile RENDER ortam değişkeni
+# (main.py'deki ADMIN_OTURUM_COOKIE_SECURE ile AYNI desen, Render'da
+# otomatik "true") yoksa Sentry hiç başlatılmıyor -- yerel geliştirme bir
+# daha canlı hata izlemeyi kirletemez.
 SENTRY_DSN = os.environ.get("SENTRY_DSN")
-if SENTRY_DSN:
+_RENDER_ORTAMI = os.environ.get("RENDER") is not None
+if SENTRY_DSN and _RENDER_ORTAMI:
     try:
         import sentry_sdk
         sentry_sdk.init(
@@ -241,6 +252,8 @@ if SENTRY_DSN:
         print("✓ Sentry hata izleme aktif.")
     except ImportError:
         print("⚠️  SENTRY_DSN ayarlı ama sentry-sdk paketi kurulu değil -- izleme devre dışı.")
+elif SENTRY_DSN and not _RENDER_ORTAMI:
+    print("ℹ️  SENTRY_DSN ayarlı ama yerel ortamdayız (RENDER yok) -- Sentry BİLEREK devre dışı, canlı hata izlemesi kirlenmesin diye.")
 
 app = FastAPI()
 
