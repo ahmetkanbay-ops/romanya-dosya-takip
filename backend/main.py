@@ -1063,6 +1063,15 @@ def admin_bugunun_durumu(_giris=Depends(admin_girisini_dogrula)):
         conn.close()
 
 
+@app.get("/api/admin/_gecici_disk_durumu")
+def _gecici_disk_durumu(_yetki=Depends(nobetci_anahtarini_dogrula)):
+    """2026-08-30 GECICI TESHIS UCU -- 23 Agustos'taki disk uyarisindan
+    (%80.3 dolu) bu yana durum degisti mi kontrol etmek icin. Dogrulama
+    biter bitmez KALDIRILACAK."""
+    from admin_panel import _disk_kullanimini_hesapla
+    return _disk_kullanimini_hesapla(DB_FILE)
+
+
 @app.get("/api/admin/saglik-kontrolu")
 def admin_saglik_kontrolu(_yetki=Depends(nobetci_anahtarini_dogrula)):
     """Gece Nobeti (7/24 izleme, 2026-08-30) icin makineler-arasi saglik
