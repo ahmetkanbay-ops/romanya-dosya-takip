@@ -680,6 +680,23 @@ def tabloyu_hazirla(conn):
         )
     """)
 
+    # 2026-08-30 EKLENTISI (Gece Nobeti -- Faz 2): her saglik kontrolunun
+    # (Gunluk Tarama/Render/Sentry/Backblaze/GitHub) EN SON bilinen durumunu
+    # tutar -- GitHub Actions'in 15 dk'da bir cagirdigi /api/admin/
+    # nobetci-kontrol-et ucu, her calisinda burasiyla KARSILASTIRMA yapip
+    # sadece DURUM DEGISTIYSE (ör. iyi->uyari) Telegram'a haber veriyor.
+    # Boylece ayni sorun her 15 dakikada tekrar tekrar bildirim BASMIYOR,
+    # sadece "yeni bir sey oldu" anlarinda. kontrol_adi PRIMARY KEY -- her
+    # kontrol turunun tek bir "son durum" satiri olur, INSERT OR REPLACE ile
+    # guncellenir.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS nobetci_durum_gecmisi (
+            kontrol_adi TEXT PRIMARY KEY,
+            son_durum TEXT NOT NULL,
+            son_degisim_zamani TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     conn.commit()
 
 

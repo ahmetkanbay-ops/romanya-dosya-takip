@@ -1093,6 +1093,57 @@ def admin_saglik_kontrolu(_yetki=Depends(nobetci_anahtarini_dogrula)):
     }
 
 
+_NOBETCI_DURUM_IKONU = {"iyi": "✅", "uyari": "🚨", "hata": "🚨", "yok": "ℹ️"}
+
+
+@app.post("/api/admin/nobetci-kontrol-et")
+def admin_nobetci_kontrol_et(_yetki=Depends(nobetci_anahtarini_dogrula)):
+    """2026-08-30 (Gece Nobeti -- Faz 2): GitHub Actions'in 15 dk'da bir
+    cagirdigi asil uc. saglik-kontrolu ile AYNI veriyi (bugunun_durumu_
+    verisini_getir) okur ama farkli olarak SONUCU nobetci_durum_gecmisi
+    ile KARSILASTIRIR -- bir kontrolun durumu bir onceki calismaya gore
+    DEGISTIYSE Telegram+e-posta ile haber verir (admin_kritik_uyari),
+    degismediyse SESSIZ kalir (ayni sorun her 15 dakikada tekrar tekrar
+    bildirim basmasin diye). Ilk calistirmada (bir kontrol icin hic kayit
+    yoksa) sessizce sadece taban durumu kaydeder, bildirim GONDERMEZ --
+    aksi halde ilk calismada TUM kontroller "degisti" sayilip bildirim
+    selinie yol acardi."""
+    conn = veritabani_baglantisi(DB_FILE, row_factory=sqlite3.Row)
+    try:
+        durumlar = bugunun_durumu_verisini_getir(conn, _son_basarili_tarama_oku())
+        onceki_durumlar = {
+            satir["kontrol_adi"]: satir["son_durum"]
+            for satir in conn.execute("SELECT kontrol_adi, son_durum FROM nobetci_durum_gecmisi")
+        }
+
+        degisenler = []
+        for d in durumlar:
+            ad, yeni_durum = d["ad"], d["durum"]
+            eski_durum = onceki_durumlar.get(ad)
+            if eski_durum is not None and eski_durum != yeni_durum:
+                degisenler.append((ad, eski_durum, yeni_durum, d["mesaj"]))
+            conn.execute(
+                "INSERT INTO nobetci_durum_gecmisi (kontrol_adi, son_durum, son_degisim_zamani) "
+                "VALUES (?, ?, CURRENT_TIMESTAMP) "
+                "ON CONFLICT(kontrol_adi) DO UPDATE SET "
+                "son_durum=excluded.son_durum, son_degisim_zamani=excluded.son_degisim_zamani",
+                (ad, yeni_durum),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    if degisenler:
+        satirlar = [
+            f"{_NOBETCI_DURUM_IKONU.get(yeni, 'ℹ️')} {ad}: {eski} → {yeni}\n   {mesaj}"
+            for ad, eski, yeni, mesaj in degisenler
+        ]
+        from bildirim import admin_kritik_uyari
+        admin_kritik_uyari("🔦 Gece Nöbeti -- durum değişikliği:\n\n" + "\n\n".join(satirlar))
+
+    return {"kontrol_edilen": len(durumlar), "degisen": len(degisenler)}
+
+
 def _yerel_pdf_url_olustur(request: Request, row) -> Optional[str]:
     """
     Bu sunucunun kendi indirdiği PDF kopyasının servis edilen adresini
