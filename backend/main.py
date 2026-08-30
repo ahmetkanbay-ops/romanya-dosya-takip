@@ -1063,6 +1063,23 @@ def admin_bugunun_durumu(_giris=Depends(admin_girisini_dogrula)):
         conn.close()
 
 
+@app.get("/api/admin/_gecici_tarama_gecmisi")
+def _gecici_tarama_gecmisi(_yetki=Depends(nobetci_anahtarini_dogrula)):
+    """2026-08-30 GECICI TESHIS UCU -- gunluk taramanin GERCEKTEN yeni
+    dosya bulup bulmadigini son 30 gunluk gecmisten kontrol etmek icin.
+    Dogrulama biter bitmez KALDIRILACAK."""
+    conn = veritabani_baglantisi(DB_FILE, row_factory=sqlite3.Row)
+    try:
+        satirlar = conn.execute(
+            "SELECT olay_tipi, detay, zaman FROM sistem_olaylari "
+            "WHERE olay_tipi IN ('tarama_tamamlandi', 'kritik_uyari') "
+            "ORDER BY zaman DESC LIMIT 60"
+        ).fetchall()
+    finally:
+        conn.close()
+    return [{"tip": s["olay_tipi"], "detay": s["detay"], "zaman": s["zaman"]} for s in satirlar]
+
+
 @app.get("/api/admin/saglik-kontrolu")
 def admin_saglik_kontrolu(_yetki=Depends(nobetci_anahtarini_dogrula)):
     """Gece Nobeti (7/24 izleme, 2026-08-30) icin makineler-arasi saglik
