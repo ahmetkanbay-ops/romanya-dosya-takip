@@ -1,0 +1,34 @@
+# Gece Nöbeti -- Faz 2 (2026-08-30)
+#
+# 7/24 izleme "gözcü" katmanı: hiçbir Claude/Render kaynağı kullanmadan,
+# GitHub'ın kendi ücretsiz zamanlayıcısıyla 15 dakikada bir backend'in
+# /api/admin/nobetci-kontrol-et ucunu çağırır. O uç durum değişikliği
+# tespit ederse Telegram+e-posta ile admin'e haber verir -- burası sadece
+# "zili çalan" dış tetikleyici, karar mantığının hepsi backend'de.
+#
+# NOBETCI_ANAHTARI bu repoda "Settings > Secrets and variables > Actions"
+# altında bir repo secret olarak tanımlı olmalı (bkz. AGENTS.md'deki
+# admin_girisini_dogrula'dan AYRI, makineler-arası anahtar deseni).
+
+name: Gece Nöbeti
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {} # elle de tetiklenebilsin diye (test/hata ayıklama)
+
+jobs:
+  kontrol-et:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sağlık kontrolünü tetikle
+        run: |
+          http_kodu=$(curl -s -o /tmp/yanit.json -w "%{http_code}" \
+            -X POST "https://romanya-dosya-takip.onrender.com/api/admin/nobetci-kontrol-et" \
+            -H "X-Nobetci-Anahtar: ${{ secrets.NOBETCI_ANAHTARI }}")
+          echo "HTTP: $http_kodu"
+          cat /tmp/yanit.json
+          if [ "$http_kodu" != "200" ]; then
+            echo "::error::Nobetci kontrolu basarisiz (HTTP $http_kodu)"
+            exit 1
+          fi
