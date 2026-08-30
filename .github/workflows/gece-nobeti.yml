@@ -1,10 +1,16 @@
 # Gece Nöbeti -- Faz 2 (2026-08-30)
 #
 # 7/24 izleme "gözcü" katmanı: hiçbir Claude/Render kaynağı kullanmadan,
-# GitHub'ın kendi ücretsiz zamanlayıcısıyla 15 dakikada bir backend'in
+# GitHub'ın kendi ücretsiz zamanlayıcısıyla 2 saatte bir backend'in
 # /api/admin/nobetci-kontrol-et ucunu çağırır. O uç durum değişikliği
 # tespit ederse Telegram+e-posta ile admin'e haber verir -- burası sadece
 # "zili çalan" dış tetikleyici, karar mantığının hepsi backend'de.
+#
+# 2026-08-30: Kullanıcı bilinçli olarak 15 dk yerine 2 saati seçti --
+# depo public olduğu için GitHub Actions dakika kotası hiç sorun değildi,
+# ama zaten sorunlara ancak akşam müdahale edebildiği için daha sık
+# kontrolün pratik bir faydası yoktu. Tekrar sıklaştırmak istenirse
+# aşağıdaki cron ifadesini değiştirmek yeterli.
 #
 # NOBETCI_ANAHTARI bu repoda "Settings > Secrets and variables > Actions"
 # altında bir repo secret olarak tanımlı olmalı (bkz. AGENTS.md'deki
@@ -14,7 +20,7 @@ name: Gece Nöbeti
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "0 */2 * * *" # her 2 saatte bir (00:00, 02:00, ... UTC)
   workflow_dispatch: {} # elle de tetiklenebilsin diye (test/hata ayıklama)
 
 jobs:
