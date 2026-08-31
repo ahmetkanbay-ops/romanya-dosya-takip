@@ -1142,6 +1142,16 @@ def _gecici_art10_dogrula(_yetki=Depends(nobetci_anahtarini_dogrula)):
     return sonuc
 
 
+@app.post("/api/admin/_gecici_telegram_test2")
+def _gecici_telegram_test2(_yetki=Depends(nobetci_anahtarini_dogrula)):
+    """2026-08-31 GECICI TESHIS UCU -- kullanicinin "telegram'dan bildirim
+    gelmiyor, gercek bir sorun oldugunda gelecek mi" sorusunu KANITLA
+    yanitlamak icin. Dogrulama biter bitmez KALDIRILACAK."""
+    from bildirim import admin_kritik_uyari
+    admin_kritik_uyari("🔦 Bu bir TEST mesajidir -- Telegram kanalinin calistigini dogrulamak icin gonderildi, gercek bir sorun degil.")
+    return {"durum": "gonderildi"}
+
+
 @app.get("/api/admin/saglik-kontrolu")
 def admin_saglik_kontrolu(_yetki=Depends(nobetci_anahtarini_dogrula)):
     """Gece Nobeti (7/24 izleme, 2026-08-30) icin makineler-arasi saglik
