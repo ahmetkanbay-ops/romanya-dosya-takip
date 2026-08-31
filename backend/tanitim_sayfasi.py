@@ -131,7 +131,41 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
   a {{ color: var(--altin); }}
   .kapsayici {{ max-width: 1040px; margin: 0 auto; padding: 0 20px; }}
 
-  header {{ text-align: center; padding: 56px 20px 40px; }}
+  /* 2026-08-31: video, header'ın YANINDA -- ayrı bir "Tanıtım Videosu"
+     bölümü olarak alta eklemek sayfayı gereksiz uzatıyordu. Tek "hero"
+     bloğu: dar ekranda alt alta, geniş ekranda yan yana. */
+  .hero {{
+    display: flex; align-items: center; justify-content: center; gap: 40px;
+    flex-wrap: wrap; max-width: 1100px; margin: 0 auto; padding: 48px 20px 36px;
+    text-align: center;
+  }}
+  .hero-metin {{ flex: 1 1 320px; max-width: 460px; }}
+  .hero-video {{ flex: 1 1 380px; max-width: 480px; width: 100%; }}
+  .hero-video video {{
+    display: block; width: 100%; border-radius: 20px; border: 1px solid var(--kenar);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.4); background: #000;
+  }}
+  /* 2026-08-31: altyazı küçük ekranda videonun ortasına doğru taşıyormuş
+     gibi görünüyordu -- bunun sebebi altyazı yazı boyutunun video küçük
+     gösterildiğinde ölçeklenmemesi. Hem yazıyı küçültüp hem de .vtt
+     dosyasındaki "line" ayarıyla altyazıyı videonun en altına sabitledik. */
+  .hero-video video::cue {{
+    font-size: 3.2vw;
+    line-height: 1.35;
+  }}
+  @media (min-width: 500px) {{
+    .hero-video video::cue {{ font-size: 15px; }}
+  }}
+  .video-etiket {{
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin-top: 12px; color: var(--gri); font-size: 13px; font-weight: 700;
+  }}
+  @media (min-width: 760px) {{
+    .hero {{ text-align: left; }}
+    .hero-metin .bayrak {{ margin: 0 0 10px; }}
+    .hero-metin .slogan {{ margin: 0 0 24px; }}
+    .video-etiket {{ justify-content: flex-start; }}
+  }}
   /* 2026-08-20 DÜZELTMESİ (kullanıcı Windows'ta fark etti): 🇷🇴 bayrak
      emojisi Windows'ta çoğu tarayıcıda düzgün render edilmiyor, sadece
      "RO" harfleri görünüyor. Uygulamanın kendisinde ZATEN emoji değil,
@@ -211,19 +245,6 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
     .karusel-noktalar span:first-child {{ background: var(--altin); width: 20px; }}
   }}
 
-  .video-sarici {{ max-width: 780px; margin: 0 auto; }}
-  .video-sarici video {{
-    display: block; width: 100%; border-radius: 20px; border: 1px solid var(--kenar);
-    box-shadow: 0 16px 40px rgba(0,0,0,0.4); background: #000;
-  }}
-  .altyazi-buton {{
-    display: flex; align-items: center; gap: 8px; margin: 14px auto 0;
-    background: var(--yuzey); border: 1px solid var(--kenar); color: var(--beyaz);
-    padding: 9px 18px; border-radius: 20px; font-weight: 700; font-size: 13px;
-    cursor: pointer; font-family: inherit;
-  }}
-  .altyazi-buton:hover {{ border-color: var(--altin); color: var(--altin); }}
-
   .ozellikler-izgara {{
     display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 20px;
@@ -236,7 +257,36 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
   .ozellik h3 {{ margin: 0 0 4px; font-size: 15px; }}
   .ozellik p {{ margin: 0; color: var(--gri); font-size: 13px; }}
 
-  .sss-liste {{ max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }}
+  /* 2026-08-31: ekran görüntüleri solda, sağdaki boşluk özellik
+     kutucuklarıyla dolduruluyor -- yan yana, tek satırlık bir bölüm. */
+  .galeri-ozellikler {{
+    display: flex; align-items: flex-start; gap: 48px; flex-wrap: wrap;
+  }}
+  .galeri-sutun {{ flex: 0 1 300px; text-align: left; }}
+  .galeri-sutun h2, .galeri-sutun .bolum-alt {{ text-align: left; }}
+  .galeri-sutun .karusel {{ margin: 0; }}
+  .galeri-sutun .karusel-altyazi {{ text-align: left; }}
+  .galeri-sutun .karusel-noktalar {{ justify-content: flex-start; }}
+  .galeri-sutun .istatistik-serit {{ justify-content: flex-start; margin-left: 0; }}
+  .ozellik-sutun {{ flex: 1 1 380px; }}
+  .ozellik-sutun h2, .ozellik-sutun .bolum-alt {{ text-align: left; }}
+  @media (max-width: 700px) {{
+    .galeri-ozellikler {{ flex-direction: column; align-items: center; }}
+    .galeri-sutun, .galeri-sutun h2, .galeri-sutun .bolum-alt,
+    .ozellik-sutun h2, .ozellik-sutun .bolum-alt {{ text-align: center; }}
+    .galeri-sutun .karusel {{ margin: 0 auto; }}
+    .galeri-sutun .karusel-altyazi {{ text-align: center; }}
+    .galeri-sutun .karusel-noktalar {{ justify-content: center; }}
+    .galeri-sutun .istatistik-serit {{ justify-content: center; margin-left: auto; }}
+  }}
+
+  .sss-liste {{
+    max-width: 900px; margin: 0 auto; display: grid;
+    grid-template-columns: repeat(2, 1fr); gap: 16px;
+  }}
+  @media (max-width: 640px) {{
+    .sss-liste {{ grid-template-columns: 1fr; }}
+  }}
   .sss-satir {{
     background: var(--yuzey); border: 1px solid var(--kenar); border-radius: 14px; padding: 18px 22px;
   }}
@@ -262,54 +312,46 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
 </head>
 <body>
 
-<header>
-  <div class="bayrak"><span style="background:#002B7F"></span><span style="background:#FCD116"></span><span style="background:#CE1126"></span></div>
-  <h1>Romanya Dosya Takip</h1>
-  <p class="slogan">Romanya vatandaşlığı başvurunuzun Stadiu Dosar ve Ordine durumunu saniyeler içinde sorgulayın -- onaylandığında otomatik bildirim alın.</p>
-  {magaza_html}
+<header class="hero">
+  <div class="hero-metin">
+    <div class="bayrak"><span style="background:#002B7F"></span><span style="background:#FCD116"></span><span style="background:#CE1126"></span></div>
+    <h1>Romanya Dosya Takip</h1>
+    <p class="slogan">Romanya vatandaşlığı başvurunuzun Stadiu Dosar ve Ordine durumunu saniyeler içinde sorgulayın -- onaylandığında otomatik bildirim alın.</p>
+    {magaza_html}
+  </div>
+  <div class="hero-video">
+    <video controls preload="metadata" poster="/statik/landing/tanitim-video-poster.jpg" playsinline>
+      <source src="/statik/landing/tanitim-video.mp4" type="video/mp4">
+      <track kind="subtitles" srclang="en" label="English" src="/statik/landing/tanitim-video-en.vtt" default>
+    </video>
+    <div class="video-etiket">▶ Elif, uygulamayı 1 dakikada anlatıyor</div>
+  </div>
 </header>
 
 <div class="kapsayici">
 
-  <section>
-    <h2>Tanıtım Videosu</h2>
-    <p class="bolum-alt">Elif, uygulamayı 1 dakikada anlatıyor</p>
-    <div class="video-sarici">
-      <video id="tanitimVideo" controls preload="metadata" poster="/statik/landing/ekran-onay.png" playsinline>
-        <source src="/statik/landing/tanitim-video.mp4" type="video/mp4">
-        <track id="altyaziTR" kind="subtitles" srclang="tr" label="Türkçe" src="/statik/landing/tanitim-video-tr.vtt" default>
-        <track id="altyaziEN" kind="subtitles" srclang="en" label="English" src="/statik/landing/tanitim-video-en.vtt">
-      </video>
-      <button type="button" id="altyaziDilButon" class="altyazi-buton" onclick="tanitimAltyaziDegistir()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <rect x="2" y="5" width="20" height="14" rx="3" stroke="currentColor" stroke-width="2"/>
-          <path d="M6 10.5h4M6 14h7M14 10.5h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        <span id="altyaziDilEtiket">Altyazı: Türkçe</span>
-      </button>
+  <section class="galeri-ozellikler">
+    <div class="galeri-sutun">
+      <h2>Uygulamadan Gerçek Görüntüler</h2>
+      <p class="bolum-alt">Uygulamayı kurmadan önce gerçek arayüzüne göz atın</p>
+      <div class="karusel">
+        {karusel_resim_html}
+      </div>
+      <div class="karusel-altyazi">
+        {karusel_altyazi_html}
+      </div>
+      <div class="karusel-noktalar">
+        {karusel_nokta_html}
+      </div>
+      {istatistik_html}
     </div>
-  </section>
 
-  <section>
-    <h2>Uygulamadan Gerçek Görüntüler</h2>
-    <p class="bolum-alt">Uygulamayı kurmadan önce gerçek arayüzüne göz atın</p>
-    <div class="karusel">
-      {karusel_resim_html}
-    </div>
-    <div class="karusel-altyazi">
-      {karusel_altyazi_html}
-    </div>
-    <div class="karusel-noktalar">
-      {karusel_nokta_html}
-    </div>
-    {istatistik_html}
-  </section>
-
-  <section>
-    <h2>Özellikler</h2>
-    <p class="bolum-alt">Vatandaşlık başvuru sürecinizi kolaylaştırmak için</p>
-    <div class="ozellikler-izgara">
-      {ozellik_html}
+    <div class="ozellik-sutun">
+      <h2>Özellikler</h2>
+      <p class="bolum-alt">Vatandaşlık başvuru sürecinizi kolaylaştırmak için</p>
+      <div class="ozellikler-izgara">
+        {ozellik_html}
+      </div>
     </div>
   </section>
 
@@ -340,29 +382,6 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
   </div>
   <div class="imza">🔒 Secured &amp; Encrypted System · By @knby · © 2026</div>
 </footer>
-
-<script>
-  // Tanıtım videosu tek dosya -- ses her zaman Türkçe (gerçek çift sesli
-  // dosya tarayıcılar arası güvenilir değil, özellikle Safari'de). Bunun
-  // yerine altyazı TR/EN arasında geçiş yapıyor. Sayfanın geri kalanı
-  // JS'siz de çalışır, sadece bu (dil değiştirmek doğası gereği etkileşim
-  // gerektirir).
-  function tanitimAltyaziDegistir() {{
-    var video = document.getElementById('tanitimVideo');
-    var etiket = document.getElementById('altyaziDilEtiket');
-    if (!video || !etiket) return;
-    var izler = video.textTracks;
-    var mevcutDil = 'tr';
-    for (var i = 0; i < izler.length; i++) {{
-      if (izler[i].mode === 'showing') {{ mevcutDil = izler[i].language; break; }}
-    }}
-    var yeniDil = mevcutDil === 'tr' ? 'en' : 'tr';
-    for (var j = 0; j < izler.length; j++) {{
-      izler[j].mode = (izler[j].language === yeniDil) ? 'showing' : 'disabled';
-    }}
-    etiket.textContent = 'Altyazı: ' + (yeniDil === 'tr' ? 'Türkçe' : 'English');
-  }}
-</script>
 
 </body>
 </html>"""
