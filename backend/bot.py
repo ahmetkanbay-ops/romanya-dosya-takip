@@ -18,6 +18,7 @@ tıklanarak bulunuyor (bkz. _kategori_elementini_bul).
 """
 import json
 import os
+import re
 import sqlite3
 import time
 from datetime import datetime
@@ -95,6 +96,35 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # backend/ klasöründen okunur/yazılır.
 VERI_DIZINI = os.environ.get("DATA_DIR", BASE_DIR)
 PDF_KOK_KLASOR = os.path.join(VERI_DIZINI, "pdfs")
+
+
+def _guncel_yil_dosyasi_mi(dosya_adi):
+    """
+    2026-08-31 KÖK NEDEN DÜZELTMESİ (kullanıcı canlı testte bulundu -- 1-2
+    haneli dosya numaraları sorguda "bulunamadı" çıkıyordu, aynı PDF'teki
+    3 haneli numaralar ise buluyordu): site, İÇİNDE BULUNULAN YILA ait bazı
+    PDF'leri AYNI dosya adında YERİNDE güncelliyor -- yeni kayıtlar
+    eklendikçe dosya büyüyor ama adı (dolayısıyla bizim "zaten indirildi"
+    kısayolumuzun anahtarı) DEĞİŞMİYOR. Kanıt: "Art-10-2026-update-
+    07.08.2026.pdf" veritabanımızda 102'den başlıyordu (1205 kayıt) ama
+    sitenin GÜNCEL hâlinde 3'ten başlıyordu (kullanıcının bizzat indirip
+    paylaştığı dosyada doğrulandı -- aynı pypdf/regex koduyla yerel testte
+    3, 5, 6, 10, 13... hepsi sorunsuz çıktı). Yani içerik değişmiş ama
+    "zaten var/işlendi" kontrolümüz bunu hiç yakalamıyordu -- ilk indirilen
+    anlık görüntü sonsuza kadar donduruluyordu.
+
+    Dosya adındaki "20XX" deseni içinde bulunulan yıla eşitse, bu dosya
+    HÂLÂ BÜYÜYOR olabilecek "aktif" bir dosya sayılır -- çağıran kod
+    "zaten var/işlendi, atla" kısayolunu bu dosyalar için atlayıp her
+    taramada yeniden indirip işlemeli. ESKİ yılların (kapanmış) dosyaları
+    için False döner -- onların "zaten işlendi, atla" davranışı HİÇ
+    değişmez (gereksiz yük/WAF riski yok, 2019-2025 arşivi test edildi:
+    toplam birkaç düzine kayıt, kapanmış).
+    """
+    eslesme = re.search(r"\b(20\d{2})\b", dosya_adi)
+    if not eslesme:
+        return False
+    return eslesme.group(1) == str(datetime.now(ROMANYA_SAAT_DILIMI).year)
 
 # TEŞHİS MODU (2026-08-15 eklendi): bazı alt kategoriler (CONSULAT / ANC,
 # REZULTATE/INVITATII INTERVIU ART. 8 ve 8.1) sayfada hiç bulunamıyor --
@@ -432,7 +462,9 @@ def _b_plani_devreye_al(page, tip, alt_kategori, http_oturum, kontrol_conn):
         eslesen_sayisi += 1
 
         hedef_yol = os.path.join(klasor_yolu, dosya_adi)
-        if os.path.exists(hedef_yol):
+        # 2026-08-31: bkz. _guncel_yil_dosyasi_mi -- aktif yılın dosyaları
+        # yerinde büyüyebiliyor, "zaten var" kısayolu onlar için atlanır.
+        if os.path.exists(hedef_yol) and not _guncel_yil_dosyasi_mi(dosya_adi):
             if pdf_zaten_islenmis_mi(kontrol_conn, tip, alt_kategori, dosya_adi):
                 continue
             try:
@@ -791,7 +823,7 @@ def botu_calistir():
                         # atlanıyor.
                         if os.path.exists(kalici_eksik_isareti):
                             print(f"      ⊘ Bilinen eksik (kaynak sitede 404), atlanıyor: {dosya_adi}")
-                        elif not os.path.exists(hedef_yol):
+                        elif not os.path.exists(hedef_yol) or _guncel_yil_dosyasi_mi(dosya_adi):
                             gercek_indirme_oldu = True
                             try:
                                 print(f"      ⬇ İndiriliyor: {dosya_adi}")
