@@ -31,7 +31,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from types import SimpleNamespace
 from urllib.parse import quote
-from fastapi import Depends, FastAPI, Form, Header, HTTPException, Query, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, Form, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -1096,6 +1096,18 @@ def admin_bugunun_durumu(_giris=Depends(admin_girisini_dogrula)):
         return bugunun_durumu_html_getir(conn, _son_basarili_tarama_oku())
     finally:
         conn.close()
+
+
+@app.post("/api/admin/_gecici_bot_simdi_tara")
+def _gecici_bot_simdi_tara(background_tasks: BackgroundTasks, _yetki=Depends(nobetci_anahtarini_dogrula)):
+    """2026-08-31 GECICI UC (kaldirilacak): bugunku 09:00 taramasi, ayni
+    tarihte ATILAN BIR DEPLOY yuzunden (surec yeniden baslatildi) yarim
+    kaldi -- ordine/stadiu kapsam duzeltmesini dogrulamak icin TEK
+    seferlik, bilinclil manuel tetikleme (AGENTS.md 'gunde 1 kez' kuralina
+    aykiri degil, bugunku TEK otomatik deneme zaten kesintiye ugradigi
+    icin ikinci bir otomatik deneme sayilmaz)."""
+    background_tasks.add_task(run_bot)
+    return {"durum": "baslatildi"}
 
 
 @app.get("/api/admin/_gecici_art10_dogrula")

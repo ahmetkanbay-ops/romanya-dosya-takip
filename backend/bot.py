@@ -120,6 +120,15 @@ def _guncel_yil_dosyasi_mi(dosya_adi):
     için False döner -- onların "zaten işlendi, atla" davranışı HİÇ
     değişmez (gereksiz yük/WAF riski yok, 2019-2025 arşivi test edildi:
     toplam birkaç düzine kayıt, kapanmış).
+
+    ÖNEMLİ (2026-08-31 -- canlı testte kendi kendime yakaladım): bu
+    fonksiyon SADECE tip=='stadiu' için çağrılmalı! ORDINE dosyaları
+    (ör. "Ordin-2753P-25.08.2026-art-11.pdf") adlarında YAYIN TARİHİNİ
+    taşıyor, "kategori yılı"nı DEĞİL -- her Ordin, yayınlandığı gün
+    kesinleşen TEK SEFERLİK bir kararname, STADIU DOSAR gibi yerinde
+    büyüyen bir liste DEĞİL. Bu ayrım yapılmadan ilk denemede canlıda
+    onlarca eski Ordine dosyası gereksiz yere yeniden indirilmeye
+    başlamıştı (siteye gereksiz yük -- tam da önlemeye çalıştığımız şey).
     """
     eslesme = re.search(r"\b(20\d{2})\b", dosya_adi)
     if not eslesme:
@@ -462,9 +471,10 @@ def _b_plani_devreye_al(page, tip, alt_kategori, http_oturum, kontrol_conn):
         eslesen_sayisi += 1
 
         hedef_yol = os.path.join(klasor_yolu, dosya_adi)
-        # 2026-08-31: bkz. _guncel_yil_dosyasi_mi -- aktif yılın dosyaları
-        # yerinde büyüyebiliyor, "zaten var" kısayolu onlar için atlanır.
-        if os.path.exists(hedef_yol) and not _guncel_yil_dosyasi_mi(dosya_adi):
+        # 2026-08-31: bkz. _guncel_yil_dosyasi_mi -- aktif yılın STADIU
+        # dosyaları yerinde büyüyebiliyor, "zaten var" kısayolu onlar için
+        # atlanır. ORDINE hariç (tek seferlik kararname, hiç değişmez).
+        if os.path.exists(hedef_yol) and not (tip == "stadiu" and _guncel_yil_dosyasi_mi(dosya_adi)):
             if pdf_zaten_islenmis_mi(kontrol_conn, tip, alt_kategori, dosya_adi):
                 continue
             try:
@@ -823,7 +833,7 @@ def botu_calistir():
                         # atlanıyor.
                         if os.path.exists(kalici_eksik_isareti):
                             print(f"      ⊘ Bilinen eksik (kaynak sitede 404), atlanıyor: {dosya_adi}")
-                        elif not os.path.exists(hedef_yol) or _guncel_yil_dosyasi_mi(dosya_adi):
+                        elif not os.path.exists(hedef_yol) or (tip == "stadiu" and _guncel_yil_dosyasi_mi(dosya_adi)):
                             gercek_indirme_oldu = True
                             try:
                                 print(f"      ⬇ İndiriliyor: {dosya_adi}")
