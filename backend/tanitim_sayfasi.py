@@ -211,6 +211,19 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
     .karusel-noktalar span:first-child {{ background: var(--altin); width: 20px; }}
   }}
 
+  .video-sarici {{ max-width: 780px; margin: 0 auto; }}
+  .video-sarici video {{
+    display: block; width: 100%; border-radius: 20px; border: 1px solid var(--kenar);
+    box-shadow: 0 16px 40px rgba(0,0,0,0.4); background: #000;
+  }}
+  .altyazi-buton {{
+    display: flex; align-items: center; gap: 8px; margin: 14px auto 0;
+    background: var(--yuzey); border: 1px solid var(--kenar); color: var(--beyaz);
+    padding: 9px 18px; border-radius: 20px; font-weight: 700; font-size: 13px;
+    cursor: pointer; font-family: inherit;
+  }}
+  .altyazi-buton:hover {{ border-color: var(--altin); color: var(--altin); }}
+
   .ozellikler-izgara {{
     display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 20px;
@@ -257,6 +270,25 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
 </header>
 
 <div class="kapsayici">
+
+  <section>
+    <h2>Tanıtım Videosu</h2>
+    <p class="bolum-alt">Elif, uygulamayı 1 dakikada anlatıyor</p>
+    <div class="video-sarici">
+      <video id="tanitimVideo" controls preload="metadata" poster="/statik/landing/ekran-onay.png" playsinline>
+        <source src="/statik/landing/tanitim-video.mp4" type="video/mp4">
+        <track id="altyaziTR" kind="subtitles" srclang="tr" label="Türkçe" src="/statik/landing/tanitim-video-tr.vtt" default>
+        <track id="altyaziEN" kind="subtitles" srclang="en" label="English" src="/statik/landing/tanitim-video-en.vtt">
+      </video>
+      <button type="button" id="altyaziDilButon" class="altyazi-buton" onclick="tanitimAltyaziDegistir()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="2" y="5" width="20" height="14" rx="3" stroke="currentColor" stroke-width="2"/>
+          <path d="M6 10.5h4M6 14h7M14 10.5h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span id="altyaziDilEtiket">Altyazı: Türkçe</span>
+      </button>
+    </div>
+  </section>
 
   <section>
     <h2>Uygulamadan Gerçek Görüntüler</h2>
@@ -308,6 +340,29 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
   </div>
   <div class="imza">🔒 Secured &amp; Encrypted System · By @knby · © 2026</div>
 </footer>
+
+<script>
+  // Tanıtım videosu tek dosya -- ses her zaman Türkçe (gerçek çift sesli
+  // dosya tarayıcılar arası güvenilir değil, özellikle Safari'de). Bunun
+  // yerine altyazı TR/EN arasında geçiş yapıyor. Sayfanın geri kalanı
+  // JS'siz de çalışır, sadece bu (dil değiştirmek doğası gereği etkileşim
+  // gerektirir).
+  function tanitimAltyaziDegistir() {{
+    var video = document.getElementById('tanitimVideo');
+    var etiket = document.getElementById('altyaziDilEtiket');
+    if (!video || !etiket) return;
+    var izler = video.textTracks;
+    var mevcutDil = 'tr';
+    for (var i = 0; i < izler.length; i++) {{
+      if (izler[i].mode === 'showing') {{ mevcutDil = izler[i].language; break; }}
+    }}
+    var yeniDil = mevcutDil === 'tr' ? 'en' : 'tr';
+    for (var j = 0; j < izler.length; j++) {{
+      izler[j].mode = (izler[j].language === yeniDil) ? 'showing' : 'disabled';
+    }}
+    etiket.textContent = 'Altyazı: ' + (yeniDil === 'tr' ? 'Türkçe' : 'English');
+  }}
+</script>
 
 </body>
 </html>"""
