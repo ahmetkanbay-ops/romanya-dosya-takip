@@ -190,7 +190,7 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
 
   .istatistik-serit {{
     display: flex; justify-content: center; gap: 40px; flex-wrap: wrap;
-    margin: 40px auto 0; max-width: 720px;
+    margin: 0 auto; max-width: 720px; padding: 12px 0 !important;
   }}
   .ist-oge {{ text-align: center; }}
   .ist-oge b {{ display: block; font-size: 28px; color: var(--altin); }}
@@ -267,7 +267,6 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
   .galeri-sutun .karusel {{ margin: 0; }}
   .galeri-sutun .karusel-altyazi {{ text-align: left; }}
   .galeri-sutun .karusel-noktalar {{ justify-content: flex-start; }}
-  .galeri-sutun .istatistik-serit {{ justify-content: flex-start; margin-left: 0; }}
   .ozellik-sutun {{ flex: 1 1 380px; }}
   .ozellik-sutun h2, .ozellik-sutun .bolum-alt {{ text-align: left; }}
   @media (max-width: 700px) {{
@@ -277,7 +276,6 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
     .galeri-sutun .karusel {{ margin: 0 auto; }}
     .galeri-sutun .karusel-altyazi {{ text-align: center; }}
     .galeri-sutun .karusel-noktalar {{ justify-content: center; }}
-    .galeri-sutun .istatistik-serit {{ justify-content: center; margin-left: auto; }}
   }}
 
   .sss-liste {{
@@ -343,7 +341,6 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
       <div class="karusel-noktalar">
         {karusel_nokta_html}
       </div>
-      {istatistik_html}
     </div>
 
     <div class="ozellik-sutun">
@@ -354,6 +351,8 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
       </div>
     </div>
   </section>
+
+  {istatistik_html}
 
   <section>
     <h2>Sıkça Sorulan Sorular</h2>
