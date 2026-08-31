@@ -1098,39 +1098,6 @@ def admin_bugunun_durumu(_giris=Depends(admin_girisini_dogrula)):
         conn.close()
 
 
-@app.get("/api/admin/_gecici_art10_kontrol")
-def _gecici_art10_kontrol(_yetki=Depends(nobetci_anahtarini_dogrula)):
-    """2026-08-31 GECICI TESHIS UCU -- Articolul 10 2026'daki 1-2 haneli
-    dosya numaralarinin DB'de olup olmadigini, hangi pdf_dosya'dan
-    geldigini kontrol etmek icin. Dogrulama biter bitmez KALDIRILACAK."""
-    conn = veritabani_baglantisi(DB_FILE, row_factory=sqlite3.Row)
-    try:
-        hedefler = ["3", "5", "6", "10", "13", "102", "340"]
-        sonuc = {}
-        for h in hedefler:
-            satirlar = conn.execute(
-                "SELECT dosya_no, yil, ana_kategori, alt_kategori, pdf_dosya, pdf_kaynak_url "
-                "FROM dosyalar WHERE dosya_no_norm = ? AND yil = '2026' AND alt_kategori LIKE '%10%'",
-                (h,),
-            ).fetchall()
-            sonuc[h] = [dict(s) for s in satirlar]
-        # Articolul 10 / 2026 icin sistemde kayitli TUM farkli pdf_dosya adlari
-        pdf_dosyalari = conn.execute(
-            "SELECT DISTINCT pdf_dosya, COUNT(*) as adet, MIN(CAST(dosya_no_norm AS INTEGER)) as min_no, "
-            "MAX(CAST(dosya_no_norm AS INTEGER)) as max_no "
-            "FROM dosyalar WHERE yil = '2026' AND alt_kategori LIKE '%10%' GROUP BY pdf_dosya"
-        ).fetchall()
-        sonuc["_pdf_dosyalari"] = [dict(p) for p in pdf_dosyalari]
-        sonuc["_alt_kategori_ornek"] = [
-            dict(r) for r in conn.execute(
-                "SELECT DISTINCT alt_kategori FROM dosyalar WHERE alt_kategori LIKE '%10%'"
-            ).fetchall()
-        ]
-    finally:
-        conn.close()
-    return sonuc
-
-
 @app.get("/api/admin/saglik-kontrolu")
 def admin_saglik_kontrolu(_yetki=Depends(nobetci_anahtarini_dogrula)):
     """Gece Nobeti (7/24 izleme, 2026-08-30) icin makineler-arasi saglik
