@@ -1098,50 +1098,6 @@ def admin_bugunun_durumu(_giris=Depends(admin_girisini_dogrula)):
         conn.close()
 
 
-@app.post("/api/admin/_gecici_bot_simdi_tara")
-def _gecici_bot_simdi_tara(background_tasks: BackgroundTasks, _yetki=Depends(nobetci_anahtarini_dogrula)):
-    """2026-08-31 GECICI UC (kaldirilacak): bugunku 09:00 taramasi, ayni
-    tarihte ATILAN BIR DEPLOY yuzunden (surec yeniden baslatildi) yarim
-    kaldi -- ordine/stadiu kapsam duzeltmesini dogrulamak icin TEK
-    seferlik, bilinclil manuel tetikleme (AGENTS.md 'gunde 1 kez' kuralina
-    aykiri degil, bugunku TEK otomatik deneme zaten kesintiye ugradigi
-    icin ikinci bir otomatik deneme sayilmaz)."""
-    background_tasks.add_task(run_bot)
-    return {"durum": "baslatildi"}
-
-
-@app.get("/api/admin/_gecici_art10_dogrula")
-def _gecici_art10_dogrula(_yetki=Depends(nobetci_anahtarini_dogrula)):
-    """2026-08-31 GECICI TESHIS UCU -- _guncel_yil_dosyasi_mi duzeltmesinin
-    bugunku 09:00 taramasinda gercekten calisip calismadigini dogrulamak
-    icin. Dogrulama biter bitmez KALDIRILACAK."""
-    conn = veritabani_baglantisi(DB_FILE, row_factory=sqlite3.Row)
-    try:
-        hedefler = ["3", "5", "6", "10", "13"]
-        sonuc = {}
-        for h in hedefler:
-            satirlar = conn.execute(
-                "SELECT dosya_no, yil, alt_kategori, pdf_dosya FROM dosyalar "
-                "WHERE dosya_no_norm = ? AND yil = '2026' AND alt_kategori LIKE '%10%'",
-                (h,),
-            ).fetchall()
-            sonuc[h] = [dict(s) for s in satirlar]
-        pdf_dosyalari = conn.execute(
-            "SELECT DISTINCT pdf_dosya, COUNT(*) as adet, MIN(CAST(dosya_no_norm AS INTEGER)) as min_no, "
-            "MAX(CAST(dosya_no_norm AS INTEGER)) as max_no "
-            "FROM dosyalar WHERE yil = '2026' AND alt_kategori LIKE '%10%' GROUP BY pdf_dosya"
-        ).fetchall()
-        sonuc["_pdf_dosyalari"] = [dict(p) for p in pdf_dosyalari]
-        son_olaylar = conn.execute(
-            "SELECT olay_tipi, detay, zaman FROM sistem_olaylari "
-            "WHERE zaman >= '2026-08-31 00:00:00' ORDER BY zaman ASC"
-        ).fetchall()
-        sonuc["_bugunku_olaylar"] = [dict(o) for o in son_olaylar]
-    finally:
-        conn.close()
-    return sonuc
-
-
 @app.get("/api/admin/saglik-kontrolu")
 def admin_saglik_kontrolu(_yetki=Depends(nobetci_anahtarini_dogrula)):
     """Gece Nobeti (7/24 izleme, 2026-08-30) icin makineler-arasi saglik

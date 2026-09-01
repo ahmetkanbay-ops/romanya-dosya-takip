@@ -322,7 +322,6 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
       <source src="/statik/landing/tanitim-video.mp4" type="video/mp4">
       <track kind="subtitles" srclang="en" label="English" src="/statik/landing/tanitim-video-en.vtt" default>
     </video>
-    <div class="video-etiket">▶ Elif, uygulamayı 1 dakikada anlatıyor</div>
   </div>
 </header>
 
