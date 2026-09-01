@@ -498,9 +498,15 @@ def b2_yedegini_yukle(yerel_dosya_yolu):
                 retries={"max_attempts": 5, "mode": "standard"},
             ),
         )
+        # 2026-09-02 IKINCI DUZELTME (canli testte kanitlandi -- ilk
+        # duzeltme YETMEDI, ayni hata AYNI noktada devam etti): sorun
+        # zaman asimi degil, multipart'in KENDISI gibi gorunuyor --
+        # baglanti multipart'in ilk parcasinda TUTARLI sekilde reddediliyor.
+        # Esik dosya boyutunun (~1GB) USTUNE cikarilip multipart TAMAMEN
+        # devre disi birakildi -- tek parcalik duz PUT denenecek (S3 PUT
+        # siniri 5GB, bizim icin cok rahat pay birakiyor).
         _aktarim_ayari = _AktarimAyari(
-            multipart_threshold=1024 * 1024 * 64,  # 64MB altı tek parça (multipart hiç devreye girmesin)
-            multipart_chunksize=1024 * 1024 * 25,  # 25MB parçalar
+            multipart_threshold=1024 * 1024 * 1024 * 2,  # 2GB -- fiilen multipart devre disi
             max_concurrency=1,
             use_threads=True,
         )
