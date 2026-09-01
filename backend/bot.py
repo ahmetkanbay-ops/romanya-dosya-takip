@@ -21,7 +21,7 @@ import os
 import re
 import sqlite3
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 import requests
 from requests.adapters import HTTPAdapter
 try:
@@ -602,8 +602,39 @@ def _bildirimleri_gonder(tum_yeni_kayitlar, bulunamayan_kategoriler, toplam_pdf_
 
 
 def _derin_tarama_gunu_mu():
-    """Pazar mı (Romanya saatiyle)? Python'da Pazartesi=0 ... Pazar=6."""
-    return datetime.now(ROMANYA_SAAT_DILIMI).weekday() == 6
+    """
+    Pazar mı (Romanya saatiyle) VE bugün henüz derin tarama denenmedi mi?
+    Python'da Pazartesi=0 ... Pazar=6.
+
+    2026-09-02 EKLENTİSİ (2x/gün'e geçiş sonrası önemli): günlük tarama
+    artık günde İKİ KEZ çalışıyor (11:00 + 15:00) -- eğer bu kontrol
+    sadece "bugün pazar mı" olsaydı, derin tarama pazar günü HER İKİ
+    çalıştırmada da tetiklenir, gereksiz yere iki katı yük/istek üretirdi.
+    Bu yüzden ayrıca sistem_olaylari'nda BUGÜN zaten bir
+    derin_tarama_tamamlandi/derin_tarama_pas_gecildi kaydı var mı
+    kontrol ediliyor -- varsa (ilk çalıştırma zaten denemişse) ikinci
+    çalıştırma sessizce atlar.
+    """
+    simdi = datetime.now(ROMANYA_SAAT_DILIMI)
+    if simdi.weekday() != 6:
+        return False
+    # sistem_olaylari.zaman SQLite CURRENT_TIMESTAMP'i (HER ZAMAN UTC) --
+    # "bugün 00:00" Romanya sınırını UTC'ye çevirmeden karşılaştırmak
+    # gece yarısına yakın saatlerde yanlış sonuç verebilirdi (bkz. AGENTS.md
+    # saat dilimi notu). Derin tarama pratikte 11:00/15:00 civarı çalıştığı
+    # için bu risk düşük ama yine de doğru yapılıyor.
+    bugun_baslangic_yerel = simdi.replace(hour=0, minute=0, second=0, microsecond=0)
+    bugun_baslangic_utc = bugun_baslangic_yerel.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    conn = veritabani_baglantisi(DB_FILE)
+    try:
+        satir = conn.execute(
+            "SELECT 1 FROM sistem_olaylari WHERE olay_tipi IN "
+            "('derin_tarama_tamamlandi', 'derin_tarama_pas_gecildi') AND zaman >= ? LIMIT 1",
+            (bugun_baslangic_utc,),
+        ).fetchone()
+    finally:
+        conn.close()
+    return satir is None
 
 
 def _derin_taramayi_calistir(context):

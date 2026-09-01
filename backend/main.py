@@ -388,18 +388,22 @@ scheduler = BackgroundScheduler(timezone=ROMANYA_SAAT_DILIMI)
 def run_bot(yeniden_deneme_mi=False):
     """Bot'u çalıştır.
 
-    2026-08-22 KARARI: Günde SADECE 1 kez, 09:00'da çalışır -- PDF
-    bulsun ya da bulmasın, aynı gün içinde tekrar denenmez. Eskiden
-    (2026-08-17 - 2026-08-22 arası) site o gün hiç PDF bulunamazsa 6 saat
-    sonra (~15:00) tek bir ek deneme daha yapılıyordu; kullanıcı bunun
-    siteyi gereksiz yere ikinci kez yorduğunu düşünüp kaldırılmasını
-    istedi -- haklı: başvuru süreçleri ay/yıl mertebesinde olduğu için,
-    site öğleden sonra kendiliğinden düzelse bile yeni PDF'leri bir gün
-    geç (ertesi 09:00'da) yakalamanın gerçek kullanıcıya hiçbir zararı
-    yok, sitenin üzerindeki yükü en aza indirmek daha değerli. Site günde
-    5 kez (2 saatte bir) taramayı kötüye kullanım sayıp IP'yi bloke
-    etmişti (bkz. 2026-08-15 notu) -- bu prensip ışığında artık günde
-    tam olarak 1 istek atılıyor.
+    2026-08-22 KARARI (ARTIK KISMEN GEÇERSİZ, bkz. 2026-09-02 notu):
+    Günde SADECE 1 kez, 09:00'da çalışırdı -- PDF bulsun ya da bulmasın,
+    aynı gün içinde tekrar denenmezdi. Eskiden (2026-08-17 - 2026-08-22
+    arası) site o gün hiç PDF bulunamazsa 6 saat sonra (~15:00) tek bir ek
+    deneme daha yapılıyordu; kullanıcı bunun siteyi gereksiz yere ikinci
+    kez yorduğunu düşünüp kaldırılmasını istemişti. Site günde 5 kez
+    (2 saatte bir) taramayı kötüye kullanım sayıp IP'yi bloke etmişti
+    (bkz. 2026-08-15 notu).
+
+    2026-09-02 KARARI: kullanıcı bilinçli olarak günde 2 keze çıkardı
+    (11:00 + 15:00, bkz. lifespan() içindeki scheduler.add_job notu) --
+    gerekçe: aynı gün eklenen bir PDF'in uygulamada "1 gün geç" görünmesi
+    güven sarsıcı bir izlenim riski taşıyor. 5x/gün'e göre hâlâ çok daha
+    ölçülü bir sıklık, ama WAF riski YAKINDAN izlenmeli (bkz. hafıza
+    notu [[tarama-sikligi-2x-izleme]]) -- sorun belirtisi görülürse 1x'e
+    geri dönülecek.
 
     yeniden_deneme_mi parametresi geriye dönük uyumluluk için duruyor
     (artık hiçbir yerden True ile çağrılmıyor, yeniden deneme
@@ -414,7 +418,7 @@ def run_bot(yeniden_deneme_mi=False):
         print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] BOT TAMAMLANDI")
 
         if not toplam_pdf_bulunan:
-            print("  ℹ Site erişilemedi ya da hiç yeni PDF bulunamadı -- bir sonraki deneme yarın 09:00'da.")
+            print("  ℹ Site erişilemedi ya da hiç yeni PDF bulunamadı -- bir sonraki deneme bugün/yarın 11:00 ya da 15:00'te.")
     except Exception as e:
         print(f"✗ Bot çalıştırma hatası: {e}")
 
@@ -424,7 +428,7 @@ def run_bot(yeniden_deneme_mi=False):
 # ---------------------------------------------------------------------------
 # dosyalar.db artık ~1GB -- bir bozulma/yanlışlıkla silinme durumunda TÜM
 # geçmiş kaybolur, yeniden kurmak saatler sürer (siteyi baştan taramak
-# gerekir). Her gece, bot'un 09:00'daki taramasından ÖNCE (03:00'te),
+# gerekir). Her gece, bot'un ilk taramasından (11:00) ÖNCE (03:00'te),
 # sqlite3'ün KENDİ "online backup" API'sini kullanarak (Connection.backup)
 # tutarlı bir kopya alınıyor -- bu, DB WAL modundayken bile ÇALIŞAN
 # SÜREÇTEN dosyayı elle kopyalamaktan (os.copy) çok daha güvenli, çünkü
@@ -576,8 +580,8 @@ def veritabani_yedekle():
 # Render'daki kalıcı disk sabit boyutlu (10GB) -- veri (DB + PDF'ler) sürekli
 # büyüdüğü için bir gün doldurabilir, dolarsa yeni PDF indirilemez/DB
 # yazmaları başarısız olur. Önceden hiçbir eşik-uyarı mekanizması yoktu.
-# Her gün 06:00'da (yedekleme 03:00, tarama 09:00 -- ikisinin arasında,
-# çakışma yok) gerçek dosya sistemi doluluk oranı kontrol ediliyor.
+# Her gün 06:00'da (yedekleme 03:00, ilk tarama 11:00 -- arada, çakışma
+# yok) gerçek dosya sistemi doluluk oranı kontrol ediliyor.
 DISK_UYARI_ESIK_YUZDE = 80  # bu oranın üstünde günlük kritik uyarı gönderilir
 
 
@@ -615,20 +619,38 @@ async def lifespan(_app: FastAPI):
     """Uygulama başlarken scheduler'ı kur, kapanırken durdur."""
     # 2026-08-15: cetatenie.just.ro, günde 5 kez (08-17 arası 2 saatte bir)
     # yapılan taramayı kötüye kullanım sayıp IP adresini bloke etti. Bu
-    # yüzden sıklık günde SADECE 1 keze düşürüldü. Ayrıca bot.py artık
+    # yüzden sıklık günde SADECE 1 keze düşürülmüştü. Ayrıca bot.py artık
     # zaten indirilmiş/işlenmiş PDF'leri tekrar taramıyor (bkz. bot.py
     # "2026-08-15" notları), bu da her çalıştırmadaki toplam istek/süreyi
     # ciddi ölçüde azaltıyor.
+    #
+    # 2026-09-02 KARARI (kullanıcı, bilinçli): günde 2 keze çıkarıldı
+    # (11:00 + 15:00) -- gerekçe: bir kullanıcı aynı gün içinde sitede yeni
+    # eklenen bir PDF'i görüp uygulamada bulamazsa "uygulama geride kalıyor/
+    # dandik" izlenimi oluşabilir, bu riski azaltmak öncelikli görüldü.
+    # 5x/gün'e göre (banın gerçekleştiği sıklık) hâlâ çok daha ölçülü.
+    # BİLİNÇLİ RİSK: ilk birkaç hafta Gece Nöbeti'nin "Günlük Tarama"
+    # durumu YAKINDAN izlenmeli -- WAF/erişim sorunu belirtisi görülürse
+    # (bkz. [[tarama-sikligi-2x-izleme]] hafıza notu) hemen 1x/gün'e
+    # geri dönülecek.
     scheduler.add_job(
         run_bot,
         'cron',
-        hour='9',
+        hour='11',
         minute='0',
-        id='pdf_downloader',
-        name='PDF Downloader Bot'
+        id='pdf_downloader_1',
+        name='PDF Downloader Bot (1. tarama)'
     )
-    # 2026-08-17: otomatik veritabanı yedeği, bot'un 09:00'daki taramasından
-    # ÖNCE (03:00'te, gece en sakin saat) alınıyor -- bkz. veritabani_yedekle().
+    scheduler.add_job(
+        run_bot,
+        'cron',
+        hour='15',
+        minute='0',
+        id='pdf_downloader_2',
+        name='PDF Downloader Bot (2. tarama)'
+    )
+    # 2026-08-17: otomatik veritabanı yedeği, taramalardan ÖNCE (03:00'te,
+    # gece en sakin saat) alınıyor -- bkz. veritabani_yedekle().
     scheduler.add_job(
         veritabani_yedekle,
         'cron',
@@ -637,8 +659,8 @@ async def lifespan(_app: FastAPI):
         id='db_yedekleme',
         name='Veritabanı Yedekleme'
     )
-    # 2026-08-19: disk kotası izleme -- yedekleme (03:00) ile tarama (09:00)
-    # arasında, gün içinde tek sefer kontrol ediyor.
+    # 2026-08-19: disk kotası izleme -- yedekleme (03:00) ile ilk tarama
+    # (11:00) arasında, gün içinde tek sefer kontrol ediyor.
     scheduler.add_job(
         disk_kotasi_kontrol_et,
         'cron',
@@ -649,7 +671,7 @@ async def lifespan(_app: FastAPI):
     )
     scheduler.start()
     print(f"\n✓ Scheduler başlatıldı!")
-    print(f"✓ Bot: Her gün SADECE 09:00'da çalışacak (siteye aşırı yük bindirmemek için sıklık düşürüldü)")
+    print(f"✓ Bot: Her gün 11:00 ve 15:00'te çalışacak (2026-09-02 kararı, WAF riski nedeniyle yakından izleniyor)")
     print(f"✓ Yedekleme: Her gün 03:00'te otomatik veritabanı yedeği alınacak (son {YEDEK_SAKLAMA_GUN_SAYISI} gün saklanır)")
     print(f"✓ Sonraki çalışma: Zamanı gelince otomatik çalışır\n")
 
@@ -777,10 +799,10 @@ def _son_basarili_tarama_oku() -> Optional[str]:
 
 
 
-# Bot'un günlük taraması (09:00, günde tek sefer -- bkz. run_bot notu)
-# normal koşullarda o saatte biter. Bu eşik, 24 saatlik güvenli aralığa
+# Bot'un günlük taraması (2026-09-02'den beri 11:00 VE 15:00, bkz. run_bot
+# notu) normal koşullarda o saatlerde biter. Bu eşik, güvenli bir aralığa
 # cömert bir pay ekliyor (tatil/hafta sonu gecikmeleri, sunucu yeniden
-# başlatmaları vb. için).
+# başlatmaları vb. için) -- 2x/gün'e geçişle daha da rahat bir pay oldu.
 SON_TARAMA_TAZELIK_ESIGI_SAAT = 30
 
 

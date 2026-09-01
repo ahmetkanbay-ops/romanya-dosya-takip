@@ -56,9 +56,18 @@ eşik/karşılaştırma yapılan her yerde `ROMANYA_SAAT_DILIMI` (Europe/Buchare
 
 ## cetatenie.just.ro'ya nazik davran
 
-Bot günde SADECE 1 kez (09:00) tarıyor -- kullanıcının bilinçli kararı,
-siteyi zorlamamak için. Daha sık polling/retry EKLEME, tekrar gündeme
-GELMEYECEK bir konu.
+Bot günde 2 kez (11:00 ve 15:00) tarıyor -- 2026-09-02'de kullanıcının
+bilinçli kararıyla 1x'ten 2x'e çıkarıldı (gerekçe: aynı gün eklenen bir
+PDF'in "1 gün geç" görünmesi güven sarsıcı bir izlenim riski taşıyordu).
+Ayrıca SADECE pazar günü, mevcut taramalardan birine eklenti olarak
+(sıklığı artırmadan) hafif bir "derin tarama" çalışır -- PDF'lerin
+silinip silinmediğini/boyutunun değiştiğini HEAD isteğiyle kontrol eder.
+Bundan DAHA SIK polling/retry EKLEME. 5x/gün (2 saatte bir) yapıldığında
+site IP'yi bloke etmişti (2026-08-15) -- 2x/gün hâlâ ölçülü ama İLK
+BİRKAÇ HAFTA Gece Nöbeti'nin "Günlük Tarama" durumu yakından izlenmeli;
+WAF/erişim sorunu belirtisi görülürse hemen 1x/gün'e (main.py
+`lifespan()` içindeki `scheduler.add_job` çağrılarından birini kaldır)
+geri dönülmeli.
 
 ## Güvenlik başlıkları (CSP)
 
