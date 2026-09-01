@@ -1177,6 +1177,22 @@ def _gecici_b2_test(_yetki=Depends(nobetci_anahtarini_dogrula)):
     return {"sonuc": sonuc}
 
 
+@app.post("/api/admin/_gecici_b2_kucuk_test")
+def _gecici_b2_kucuk_test(_yetki=Depends(nobetci_anahtarini_dogrula)):
+    """2026-09-02 GECICI TESHIS UCU -- sorunun BUYUK dosyaya mi yoksa
+    genel B2 baglantisina mi ozgu oldugunu ayirt etmek icin, sadece
+    birkac baytlik minik bir test dosyasi yukler."""
+    import tempfile
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        f.write("test")
+        gecici_yol = f.name
+    try:
+        sonuc = b2_yedegini_yukle(gecici_yol)
+    finally:
+        os.remove(gecici_yol)
+    return {"sonuc": sonuc}
+
+
 @app.get("/api/admin/saglik-kontrolu")
 def admin_saglik_kontrolu(_yetki=Depends(nobetci_anahtarini_dogrula)):
     """Gece Nobeti (7/24 izleme, 2026-08-30) icin makineler-arasi saglik
