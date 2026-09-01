@@ -507,6 +507,7 @@ def b2_yedegini_yukle(yerel_dosya_yolu):
                 # uyumlulugu geri getiriyor.
                 request_checksum_calculation="when_required",
                 response_checksum_validation="when_required",
+                s3={"payload_signing_enabled": False},
             ),
         )
         # 2026-09-02 IKINCI DUZELTME (canli testte kanitlandi -- ilk
