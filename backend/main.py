@@ -496,6 +496,17 @@ def b2_yedegini_yukle(yerel_dosya_yolu):
                 connect_timeout=60,
                 read_timeout=180,
                 retries={"max_attempts": 5, "mode": "standard"},
+                # 2026-09-02 UCUNCU DUZELTME (canli testte kanitlandi --
+                # ilk iki duzeltme YETMEDI): duz/imzasiz istekler ANINDA
+                # basariyla donuyordu (0.7sn, dogru 403), sadece boto3'un
+                # imzali PUT/POST'u takiliyordu -- bu, yeni botocore
+                # surumlerinin (1.36+) S3 istekleri icin VARSAYILAN olarak
+                # eklediği checksum trailer/header'larinin Backblaze B2 gibi
+                # tam AWS-uyumlu OLMAYAN S3-uyumlu servislerle bilinen bir
+                # uyumsuzlugu. "when_required"a dusurmek AWS disi uctan uca
+                # uyumlulugu geri getiriyor.
+                request_checksum_calculation="when_required",
+                response_checksum_validation="when_required",
             ),
         )
         # 2026-09-02 IKINCI DUZELTME (canli testte kanitlandi -- ilk
