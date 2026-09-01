@@ -59,17 +59,48 @@ ADMIN_EPOSTA = os.environ.get("ADMIN_EPOSTA")
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 
 
+def _olu_tokenlari_sil(tokenlar):
+    """2026-09-02 EKLENTİSİ (kullanıcı fark etti -- admin panelindeki
+    "Toplam cihaz" sayısı uygulamayı silen kullanıcılarla da ŞİŞİYORDU,
+    çünkü buraya kadar HİÇBİR temizlik yoktu): Expo'nun "DeviceNotRegistered"
+    dediği (uygulama kaldırılmış/token artık geçersiz) token'ları
+    push_tokenlari tablosundan kalıcı olarak siler."""
+    if not tokenlar:
+        return
+    try:
+        conn = veritabani_baglantisi(DB_FILE)
+        conn.executemany(
+            "DELETE FROM push_tokenlari WHERE expo_push_token = ?",
+            [(t,) for t in tokenlar],
+        )
+        conn.commit()
+        conn.close()
+        print(f"✓ {len(tokenlar)} geçersiz (DeviceNotRegistered) token temizlendi.")
+    except Exception as e:
+        print(f"✗ Ölü token temizliği başarısız: {str(e)[:80]}")
+
+
 def expo_push_gonder(tokenlar, baslik, govde, veri=None):
     """
     tokenlar: 'ExponentPushToken[...]' formatında token listesi.
     Expo API tek istekte en fazla 100 mesaj kabul eder, otomatik olarak
     100'erli parçalara bölünür.
+
+    2026-09-02 DÜZELTMESİ: öncesinde Expo'nun yanıtı HİÇ okunmuyordu --
+    istek atılıp exception fırlamazsa "başarılı" sayılıyordu. Ama Expo
+    200 OK dönüp içinde "status":"error","details":{"error":
+    "DeviceNotRegistered"} taşıyan bir gövde de döndürebilir (token
+    artık geçerli değil, uygulama silinmiş olabilir) -- bu HİÇBİR ZAMAN
+    yakalanmıyordu, ölü token'lar veritabanında sonsuza kadar birikiyordu
+    (admin panelindeki "Toplam cihaz" sayısını gerçek kullanıcı sayısından
+    fazla gösteriyordu, kullanıcı bunu canlı testte fark etti).
     """
     tokenlar = [t for t in (tokenlar or []) if t]
     if not tokenlar:
         return
 
     basarili_sayisi = 0
+    olu_tokenlar = []
     for i in range(0, len(tokenlar), 100):
         parca = tokenlar[i:i + 100]
         mesajlar = [
@@ -77,13 +108,26 @@ def expo_push_gonder(tokenlar, baslik, govde, veri=None):
             for token in parca
         ]
         try:
-            requests.post(
+            yanit = requests.post(
                 EXPO_PUSH_URL,
                 json=mesajlar,
                 timeout=15,
                 headers={"Content-Type": "application/json", "Accept": "application/json"},
             )
             basarili_sayisi += len(parca)
+            try:
+                sonuclar = yanit.json().get("data", [])
+                for token, sonuc in zip(parca, sonuclar):
+                    if (
+                        isinstance(sonuc, dict)
+                        and sonuc.get("status") == "error"
+                        and sonuc.get("details", {}).get("error") == "DeviceNotRegistered"
+                    ):
+                        olu_tokenlar.append(token)
+            except Exception:
+                # Yanıt gövdesi beklenmedik formatta olsa bile gönderim
+                # kendisi zaten yapıldı -- sadece temizlik atlanır.
+                pass
         except Exception as e:
             print(f"✗ Expo push gönderim hatası: {str(e)[:80]}")
 
@@ -91,6 +135,8 @@ def expo_push_gonder(tokenlar, baslik, govde, veri=None):
         _olay_kaydet_sessizce(
             "push_gonderildi", f"{basarili_sayisi} cihaza gönderildi: \"{baslik}\""
         )
+    if olu_tokenlar:
+        _olu_tokenlari_sil(olu_tokenlar)
 
 
 def telegram_gonder(mesaj):

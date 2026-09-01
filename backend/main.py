@@ -464,18 +464,45 @@ B2_SAKLAMA_GUN_SAYISI = 30  # bulutta yerelden daha uzun tutuyoruz -- ucuz, fela
 def b2_yedegini_yukle(yerel_dosya_yolu):
     """Yerel bir yedek dosyasını Backblaze B2'ye yükler, B2_SAKLAMA_GUN_SAYISI'ndan
     eski bulut yedeklerini siler. B2_* ortam değişkenleri ayarlı değilse
-    sessizce atlanır -- yerel yedekleme bundan etkilenmez. Dönüş değeri
-    sadece /api/yedek-dogrulama-testi'nin sonucu HTTP yanıtında
-    gösterebilmesi için var, normal gece akışı bunu kullanmıyor."""
+    sessizce atlanır -- yerel yedekleme bundan etkilenmez."""
     if not (B2_KEY_ID and B2_APPLICATION_KEY and B2_BUCKET_ADI and B2_ENDPOINT):
         return {"durum": "atlandi", "sebep": "B2_* ortam değişkenleri ayarlı değil"}
     try:
         import boto3
+        from botocore.config import Config as _BotoConfig
+        from boto3.s3.transfer import TransferConfig as _AktarimAyari
+
+        # 2026-09-02 DUZELTMESI (kullanici canli testte fark etti -- 2 gece
+        # ust uste ayni hata): 3 manuel deneme (5sn/15sn bekleme) hep AYNI
+        # noktada -- multipart yuklemenin BIRINCI parcasinda -- "Connection
+        # was closed before we received a valid response" ile basarisiz
+        # oluyordu. ~1GB'lik dosyada boto3'un VARSAYILAN ayarlari (8MB'lik
+        # parcalar, dusuk zaman asimi) Render'dan Backblaze'e giden baglanti
+        # icin yetersiz kaliyor gibi gorunuyor -- rastgele bir ag sicramasi
+        # DEGIL, sistemik bir zaman asimi sorunu (2 farkli gecede de AYNI
+        # asamada basarisiz oldu). Cozum: (1) daha uzun connect/read zaman
+        # asimlari + botocore'un KENDI SDK-seviyesi retry mekanizmasi
+        # (bizim 3 manuel denememizin ICINDE, her denemede ekstra bir
+        # guvenlik agi), (2) daha buyuk parca boyutu (25MB) -- 1GB'lik dosya
+        # icin ~130 parca yerine ~40 parca, daha az round-trip/basarisizlik
+        # firsati, (3) tek seferde 1 parca (concurrency yok) -- baglanti
+        # rekabetinin sorunun bir parcasi olma ihtimaline karsi.
         s3 = boto3.client(
             "s3",
             endpoint_url=B2_ENDPOINT,
             aws_access_key_id=B2_KEY_ID,
             aws_secret_access_key=B2_APPLICATION_KEY,
+            config=_BotoConfig(
+                connect_timeout=60,
+                read_timeout=180,
+                retries={"max_attempts": 5, "mode": "standard"},
+            ),
+        )
+        _aktarim_ayari = _AktarimAyari(
+            multipart_threshold=1024 * 1024 * 64,  # 64MB altı tek parça (multipart hiç devreye girmesin)
+            multipart_chunksize=1024 * 1024 * 25,  # 25MB parçalar
+            max_concurrency=1,
+            use_threads=True,
         )
         dosya_adi = os.path.basename(yerel_dosya_yolu)
         anahtar = f"veritabani-yedekleri/{dosya_adi}"
@@ -491,7 +518,7 @@ def b2_yedegini_yukle(yerel_dosya_yolu):
         son_hata = None
         for deneme in range(1, 4):
             try:
-                s3.upload_file(yerel_dosya_yolu, B2_BUCKET_ADI, anahtar)
+                s3.upload_file(yerel_dosya_yolu, B2_BUCKET_ADI, anahtar, Config=_aktarim_ayari)
                 son_hata = None
                 break
             except Exception as e:
@@ -529,9 +556,8 @@ def b2_yedegini_yukle(yerel_dosya_yolu):
 
 def veritabani_yedekle():
     """dosyalar.db'nin tutarlı bir kopyasını yedekler/ klasörüne alır,
-    YEDEK_SAKLAMA_GUN_SAYISI'ndan eski yedekleri siler. Dönüş değeri
-    b2_yedegini_yukle()'nin sonucu (varsa) -- normal gece zamanlayıcısı
-    bunu kullanmıyor, sadece /api/yedek-dogrulama-testi okuyor."""
+    YEDEK_SAKLAMA_GUN_SAYISI'ndan eski yedekleri siler, ardından
+    b2_yedegini_yukle() ile buluta yükler."""
     try:
         os.makedirs(YEDEK_KLASOR, exist_ok=True)
         zaman_damgasi = datetime.now().strftime("%Y-%m-%d_%H-%M")
