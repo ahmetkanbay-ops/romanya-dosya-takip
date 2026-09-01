@@ -697,7 +697,115 @@ def tabloyu_hazirla(conn):
         )
     """)
 
+    # 2026-09-02 EKLENTISI (kullanici istegi): her taramanin OZETINI kalici
+    # tutar -- admin panelindeki "Tarama Gecmisi" sayfasi buradan besleniyor.
+    # sistem_olaylari'ndaki "tarama_tamamlandi" olayi SADECE bir metin
+    # ozeti tutuyordu (parse edilmesi gerekiyordu); burada sayisal alanlar
+    # ayri sutunlarda, yeni kayitlarin DETAYI (hangi kategoride/hangi PDF'te)
+    # ayri tabloda (tarama_yeni_kayitlar) -- ikisi tarama_zamani ile eslenir.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tarama_gecmisi (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tarama_zamani TEXT NOT NULL,
+            tur TEXT NOT NULL DEFAULT 'gunluk',
+            toplam_pdf_bulunan INTEGER NOT NULL DEFAULT 0,
+            kaydedilen_kayit INTEGER NOT NULL DEFAULT 0,
+            yeni_kayit_sayisi INTEGER NOT NULL DEFAULT 0,
+            yeni_pdf_sayisi INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tarama_gecmisi_zaman ON tarama_gecmisi(tarama_zamani)")
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tarama_yeni_kayitlar (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tarama_zamani TEXT NOT NULL,
+            dosya_no TEXT NOT NULL,
+            yil TEXT,
+            ana_kategori TEXT NOT NULL,
+            alt_kategori TEXT NOT NULL,
+            pdf_dosya TEXT
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tarama_yeni_kayit_zaman ON tarama_yeni_kayitlar(tarama_zamani)")
+
     conn.commit()
+
+
+# 2026-09-02 (kullanici istegi): "Stadiu Dosar / ARTICOLUL 10" gibi
+# insan-okunur kategori yolu -- bildirim metinlerinde ve Tarama Gecmisi
+# sayfasinda ayni bicimde kullanilsin diye TEK yerden.
+_ANA_KATEGORI_GORUNEN_AD = {"stadiu": "Stadiu Dosar", "ordine": "Ordine"}
+
+
+def kategori_yolu_goster(ana_kategori, alt_kategori):
+    ana = _ANA_KATEGORI_GORUNEN_AD.get(ana_kategori, ana_kategori)
+    return f"{ana} / {alt_kategori}" if alt_kategori else ana
+
+
+def yeni_kayitlar_ozeti(yeni_kayitlar, maks_kategori=4):
+    """
+    2026-09-02 (kullanici istegi): genel "yeni dosya eklendi" push
+    bildiriminin govdesine eklenecek kisa kategori ozeti -- push bildirim
+    govdesi cok uzun olmasin diye kategori basina SAYI ile ozetlenir, tek
+    tek dosya numarasi listelenmez. Ornek:
+      "Stadiu Dosar / ARTICOLUL 10 (8), Ordine / Ordine articolul 11 (3)"
+    maks_kategori'den fazla farkli kategori varsa "+N diger kategori" ile
+    kisaltilir.
+    """
+    if not yeni_kayitlar:
+        return ""
+    sayaclar = {}
+    sira = []
+    for kayit in yeni_kayitlar:
+        yol = kategori_yolu_goster(kayit.get("ana_kategori"), kayit.get("alt_kategori"))
+        if yol not in sayaclar:
+            sira.append(yol)
+        sayaclar[yol] = sayaclar.get(yol, 0) + 1
+    sira.sort(key=lambda y: sayaclar[y], reverse=True)
+    parcalar = [f"{yol} ({sayaclar[yol]})" for yol in sira[:maks_kategori]]
+    if len(sira) > maks_kategori:
+        parcalar.append(f"+{len(sira) - maks_kategori} diğer kategori")
+    return ", ".join(parcalar)
+
+
+def tarama_gecmisine_kaydet(conn, tur, tarama_zamani, toplam_pdf_bulunan, kaydedilen_kayit, yeni_kayitlar):
+    """
+    Bir taramanin ozetini + (varsa) her yeni kaydin detayini kalici olarak
+    yazar. yeni_kayitlar: bot.py'nin zaten topladigi
+    [{"dosya_no":..., "yil":..., "ana_kategori":..., "alt_kategori":...}, ...]
+    listesi (pdf_dosya alani varsa o da yazilir, yoksa None kalir).
+    Cagiran taraf (bot.py) hata olsa bile ana tarama akisini durdurmamali --
+    bu yuzden burasi da guvenli_commit'in ayni "sessizce yut, ana islemi
+    engelleme" ilkesine uyar.
+    """
+    cursor = conn.cursor()
+    yeni_pdf_adlari = {k.get("pdf_dosya") for k in yeni_kayitlar if k.get("pdf_dosya")}
+    cursor.execute(
+        """
+        INSERT INTO tarama_gecmisi
+        (tarama_zamani, tur, toplam_pdf_bulunan, kaydedilen_kayit, yeni_kayit_sayisi, yeni_pdf_sayisi)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (tarama_zamani, tur, toplam_pdf_bulunan, kaydedilen_kayit, len(yeni_kayitlar), len(yeni_pdf_adlari)),
+    )
+    for kayit in yeni_kayitlar:
+        cursor.execute(
+            """
+            INSERT INTO tarama_yeni_kayitlar
+            (tarama_zamani, dosya_no, yil, ana_kategori, alt_kategori, pdf_dosya)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                tarama_zamani,
+                kayit.get("dosya_no"),
+                kayit.get("yil"),
+                kayit.get("ana_kategori"),
+                kayit.get("alt_kategori"),
+                kayit.get("pdf_dosya"),
+            ),
+        )
+    guvenli_commit(conn)
 
 
 # 2026-08-20 (sıra tahmini özelliği): "İşlemde" durumundaki maddeler --

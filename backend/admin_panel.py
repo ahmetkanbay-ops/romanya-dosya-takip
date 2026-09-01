@@ -25,7 +25,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-from dosya_utils import ROMANYA_SAAT_DILIMI
+from dosya_utils import ROMANYA_SAAT_DILIMI, kategori_yolu_goster
 
 # 2026-08-19 DÜZELTMESİ (kullanıcı fark etti, verileri panelle çapraz
 # doğruladıktan sonra sordu): rakamların KENDİSİ hep doğruydu ama "bugün/
@@ -487,6 +487,147 @@ def _bugunun_durumu_html(durumlar):
     return "".join(satirlar)
 
 
+def tarama_gecmisi_verisini_getir(conn, limit=30):
+    """
+    2026-09-02 EKLENTİSİ (kullanıcı isteği): "Tarama Geçmişi" sayfası için
+    -- her taramanın özeti + yeni bulunan kayıtların hangi kategori/PDF'ten
+    geldiği (bkz. dosya_utils.tarama_gecmisine_kaydet). En yeni tarama en
+    üstte, en fazla `limit` tarama gösterilir (sayfa çok uzamasın diye).
+    """
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT tarama_zamani, tur, toplam_pdf_bulunan, kaydedilen_kayit, yeni_kayit_sayisi, yeni_pdf_sayisi "
+        "FROM tarama_gecmisi ORDER BY id DESC LIMIT ?",
+        (limit,),
+    )
+    taramalar = cursor.fetchall()
+
+    sonuc = []
+    for zaman, tur, toplam, kayit, yeni_sayi, yeni_pdf in taramalar:
+        gruplar = []
+        if yeni_sayi:
+            cursor.execute(
+                "SELECT dosya_no, ana_kategori, alt_kategori, pdf_dosya FROM tarama_yeni_kayitlar "
+                "WHERE tarama_zamani = ? ORDER BY ana_kategori, alt_kategori, pdf_dosya",
+                (zaman,),
+            )
+            # (kategori_yolu, pdf_dosya) -> [dosya_no, ...] şeklinde grupla --
+            # aynı PDF'ten gelen kayıtlar bir arada gösterilsin.
+            grup_sozlugu = {}
+            grup_sirasi = []
+            for dosya_no, ana_kategori, alt_kategori, pdf_dosya in cursor.fetchall():
+                anahtar = (kategori_yolu_goster(ana_kategori, alt_kategori), pdf_dosya)
+                if anahtar not in grup_sozlugu:
+                    grup_sozlugu[anahtar] = []
+                    grup_sirasi.append(anahtar)
+                grup_sozlugu[anahtar].append(dosya_no)
+            gruplar = [
+                {"kategori_yolu": k[0], "pdf_dosya": k[1], "dosya_nolari": grup_sozlugu[k]}
+                for k in grup_sirasi
+            ]
+        sonuc.append({
+            "zaman": zaman, "tur": tur, "toplam_pdf": toplam, "kayit": kayit,
+            "yeni_sayi": yeni_sayi, "yeni_pdf": yeni_pdf, "gruplar": gruplar,
+        })
+    return sonuc
+
+
+def _tarama_gecmisi_zamani_goster(zaman_metni):
+    # tarama_gecmisi.tarama_zamani zaten ROMANYA_SAAT_DILIMI ile yazılıyor
+    # (bkz. bot.py) -- sistem_olaylari.zaman'ın aksine burada AYRICA
+    # UTC->Romanya çevirisi YAPILMAMALI (zaten yerel), sadece biçimlendirilir.
+    try:
+        return datetime.strptime(zaman_metni, "%Y-%m-%d %H:%M:%S").strftime("%d.%m.%Y %H:%M")
+    except Exception:
+        return _e(zaman_metni)
+
+
+def tarama_gecmisi_html(taramalar):
+    """2026-09-02: /admin/tarama-gecmisi sayfasının tam HTML'i -- her
+    taramayı bir kart olarak, yeni kayıtları kategori/PDF'e göre gruplu
+    gösterir. admin_sayfa_html ile AYNI görsel dil (renkler/sınıflar)."""
+    if not taramalar:
+        govde = '<p class="bos">Henüz kayıtlı tarama yok.</p>'
+    else:
+        kartlar = []
+        for t in taramalar:
+            baslik = f"{_tarama_gecmisi_zamani_goster(t['zaman'])} — {_e(t['tur']).upper()}"
+            ozet = (
+                f"{t['toplam_pdf']} PDF bulundu, {t['kayit']} kayıt işlendi "
+                f"({t['yeni_sayi']} yeni, {t['yeni_pdf']} yeni PDF dosyasında)"
+            )
+            if t["gruplar"]:
+                grup_html_parcalari = []
+                for g in t["gruplar"]:
+                    nolar = g["dosya_nolari"]
+                    gosterilen = ", ".join(nolar[:20])
+                    if len(nolar) > 20:
+                        gosterilen += f" … (+{len(nolar) - 20} tane daha)"
+                    grup_html_parcalari.append(f"""
+                    <div class="dagilim-satir" style="flex-direction:column;align-items:flex-start;gap:3px;padding:8px 0">
+                      <span><b>{_e(g['kategori_yolu'])}</b> <span style="color:var(--metin-ikincil)">— {_e(g['pdf_dosya'])} ({len(nolar)})</span></span>
+                      <span style="font-size:12px;color:var(--metin-ikincil);font-variant-numeric:tabular-nums">{_e(gosterilen)}</span>
+                    </div>""")
+                detay_html = "".join(grup_html_parcalari)
+            else:
+                detay_html = '<p class="bos">Bu taramada yeni kayıt bulunmadı.</p>'
+            kartlar.append(f"""
+            <div class="genis-kart">
+              <h3>{baslik}</h3>
+              <p style="margin:0 0 8px;font-size:13px;color:var(--metin-ikincil)">{_e(ozet)}</p>
+              {detay_html}
+            </div>""")
+        govde = "".join(kartlar)
+
+    return f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tarama Geçmişi — Romanya Dosya Takip</title>
+{_ADMIN_PWA_HEAD}
+<style>
+  :root {{
+    --lacivert-koyu: {LACIVERT_KOYU}; --lacivert: {LACIVERT}; --altin: {ALTIN};
+    --zemin: #f6f7fb; --yuzey: #ffffff; --kenar: #e4e7ee;
+    --metin: #1c2433; --metin-ikincil: #6b7280;
+  }}
+  * {{ box-sizing: border-box; }}
+  body {{
+    margin: 0; padding: 32px 20px 60px; background: var(--zemin); color: var(--metin);
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  }}
+  .sayfa {{ max-width: 860px; margin: 0 auto; }}
+  header.ustbilgi {{
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 22px; flex-wrap: wrap; gap: 8px;
+  }}
+  header.ustbilgi h1 {{ font-size: 20px; margin: 0; color: var(--lacivert-koyu); }}
+  header.ustbilgi a {{ font-size: 12.5px; color: var(--metin-ikincil); }}
+  .genis-kart {{
+    background: var(--yuzey); border: 1px solid var(--kenar); border-radius: 10px;
+    padding: 16px 18px; margin-top: 12px;
+  }}
+  .genis-kart h3 {{ font-size: 13.5px; margin: 0 0 4px; color: var(--lacivert-koyu); }}
+  .dagilim-satir {{ display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--kenar); font-size: 13.5px; }}
+  .dagilim-satir:last-child {{ border-bottom: none; }}
+  p.bos {{ color: var(--metin-ikincil); font-size: 13px; font-style: italic; margin: 4px 0; }}
+  footer.altbilgi {{ text-align: center; font-size: 11.5px; color: var(--metin-ikincil); margin-top: 30px; }}
+</style>
+</head>
+<body>
+<div class="sayfa">
+  <header class="ustbilgi">
+    <h1>🗂️ Tarama Geçmişi</h1>
+    <a href="/admin">← Panele dön</a>
+  </header>
+  {govde}
+  <footer class="altbilgi">Romanya Dosya Takip — en yeni {len(taramalar)} tarama gösteriliyor.</footer>
+</div>
+</body>
+</html>"""
+
+
 _ADMIN_PWA_HEAD = """
 <link rel="manifest" href="/admin/manifest.json">
 <meta name="theme-color" content="#0f1a2e">
@@ -676,7 +817,7 @@ def admin_sayfa_html(m):
 <div class="sayfa">
   <header class="ustbilgi">
     <h1>📊 Admin Paneli</h1>
-    <span class="zaman">Oluşturulma: {m['olusturma_zamani']}</span>
+    <span class="zaman">Oluşturulma: {m['olusturma_zamani']} · <a href="/admin/tarama-gecmisi" style="color:var(--metin-ikincil)">Tarama Geçmişi →</a></span>
   </header>
 
   <div class="bolum">

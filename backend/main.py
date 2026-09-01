@@ -84,6 +84,7 @@ from pywebpush import webpush, WebPushException
 from admin_panel import (
     metrikleri_hesapla, admin_sayfa_html, admin_giris_html,
     bugunun_durumu_html_getir, bugunun_durumu_verisini_getir,
+    tarama_gecmisi_verisini_getir, tarama_gecmisi_html,
 )
 from tanitim_sayfasi import tanitim_sayfasi_html
 
@@ -872,6 +873,20 @@ def admin_paneli(request: Request):
     finally:
         conn.close()
     return admin_sayfa_html(metrikler)
+
+
+@app.get("/admin/tarama-gecmisi", response_class=HTMLResponse)
+def admin_tarama_gecmisi(request: Request):
+    """2026-09-02 (kullanıcı isteği): günlük taramalarda hangi kategoride/
+    hangi PDF'te kaç yeni kayıt bulunduğunu geriye dönük gösteren sayfa."""
+    if not _admin_oturum_dogrula(request):
+        return RedirectResponse(url="/admin/giris", status_code=303)
+    conn = veritabani_baglantisi(DB_FILE)
+    try:
+        taramalar = tarama_gecmisi_verisini_getir(conn)
+    finally:
+        conn.close()
+    return tarama_gecmisi_html(taramalar)
 
 
 @app.get("/admin/giris", response_class=HTMLResponse)

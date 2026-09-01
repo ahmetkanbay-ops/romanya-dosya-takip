@@ -156,6 +156,7 @@ def pdf_verilerini_ice_aktar(pdf_yolu, ana_kategori, alt_kategori, kaynak_url=No
                 "yil": yil,
                 "ana_kategori": ana_kategori,
                 "alt_kategori": alt_kategori,
+                "pdf_dosya": dosya_adi,
             })
     guvenli_commit(conn)
     conn.close()

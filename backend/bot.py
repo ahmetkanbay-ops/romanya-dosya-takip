@@ -86,6 +86,9 @@ from dosya_utils import (
     ordine_dosya_kategorisi_uyusuyor_mu,
     sistem_olayi_kaydet,
     bekleme_kuyrugunu_guncelle,
+    tarama_gecmisine_kaydet,
+    yeni_kayitlar_ozeti,
+    kategori_yolu_goster,
     ROMANYA_SAAT_DILIMI,
 )
 from bildirim import expo_push_gonder, admin_kritik_uyari
@@ -518,10 +521,19 @@ def _bildirimleri_gonder(tum_yeni_kayitlar, bulunamayan_kategoriler, toplam_pdf_
     if tum_yeni_kayitlar:
         tokenlar = _tum_push_tokenlari()
         if tokenlar:
+            # 2026-09-02 (kullanici istegi): govde artik SADECE "yeni dosya
+            # eklendi" demiyor -- hangi kategori(ler)de kac yeni kayit
+            # bulundugunu da gosteriyor (bkz. yeni_kayitlar_ozeti).
+            ozet = yeni_kayitlar_ozeti(tum_yeni_kayitlar)
+            govde = (
+                f"{len(tum_yeni_kayitlar)} yeni dosya eklendi: {ozet}"
+                if ozet else
+                "cetatenie.just.ro sayfası sisteme yeni dosya eklemiştir, sorgulamak için dokunun."
+            )
             expo_push_gonder(
                 tokenlar,
                 "Yeni dosya eklendi",
-                "cetatenie.just.ro sayfası sisteme yeni dosya eklemiştir, sorgulamak için dokunun.",
+                govde,
                 {"tip": "yeni_dosya"},
             )
             print(f"✓ Genel bildirim {len(tokenlar)} cihaza gönderildi.")
@@ -589,6 +601,92 @@ def _bildirimleri_gonder(tum_yeni_kayitlar, bulunamayan_kategoriler, toplam_pdf_
         )
 
 
+def _derin_tarama_gunu_mu():
+    """Pazar mı (Romanya saatiyle)? Python'da Pazartesi=0 ... Pazar=6."""
+    return datetime.now(ROMANYA_SAAT_DILIMI).weekday() == 6
+
+
+def _derin_taramayi_calistir(context):
+    """
+    2026-09-02 (kullanıcı isteği): HAFTALIK, HAFİF bir "derin tarama" --
+    normal günlük taramanın SONUNDA, SADECE PAZAR günleri çalışır (sıklığı
+    ARTIRMAZ, mevcut tek günlük taramaya bir EKLENTİ). Amaç: sitede zaten
+    bildiğimiz PDF'lerin (a) hâlâ erişilebilir olduğunu (silinmemiş/
+    taşınmamış) ve (b) boyutunun değişmediğini (içerik değişmiş olabilir
+    sinyali) HAFİF bir HEAD isteğiyle kontrol etmek -- PDF'i yeniden
+    İNDİRMEDEN.
+
+    KAPSAM bilinçli olarak SADECE GÜNCEL + BİR ÖNCEKİ YILA daraltıldı --
+    eski yılların arşivi pratikte hiç değişmiyor (2019-2025 toplamda
+    birkaç düzine kayıt, hepsi kapanmış), binlerce eski PDF'i her hafta
+    kontrol etmek hem gereksiz yük hem de WAF riski doğurur.
+
+    Dönen değer: (kontrol_edilen_sayisi, anomali_listesi).
+    """
+    bu_yil = datetime.now(ROMANYA_SAAT_DILIMI).year
+    kapsam_yillari = (str(bu_yil), str(bu_yil - 1))
+
+    kontrol_conn = veritabani_baglantisi(DB_FILE, row_factory=sqlite3.Row)
+    try:
+        satirlar = kontrol_conn.execute(
+            "SELECT DISTINCT pdf_dosya, pdf_kaynak_url, ana_kategori, alt_kategori "
+            "FROM dosyalar WHERE yil IN (?, ?) AND pdf_kaynak_url IS NOT NULL "
+            "AND pdf_dosya IS NOT NULL",
+            kapsam_yillari,
+        ).fetchall()
+    finally:
+        kontrol_conn.close()
+
+    print(f"\n{'='*60}")
+    print(f"DERİN TARAMA (haftalık, {bu_yil}+{bu_yil-1}): {len(satirlar)} PDF kontrol edilecek")
+    print(f"{'='*60}")
+
+    anomaliler = []
+    kontrol_edilen = 0
+    for satir in satirlar:
+        dosya_adi = satir["pdf_dosya"]
+        kaynak_url = satir["pdf_kaynak_url"]
+        ana_kategori = satir["ana_kategori"]
+        alt_kategori = satir["alt_kategori"]
+        kontrol_edilen += 1
+        if kontrol_edilen % 200 == 0:
+            print(f"  ... {kontrol_edilen}/{len(satirlar)} kontrol edildi ({len(anomaliler)} anomali şimdiye kadar)")
+        try:
+            yanit = context.request.head(kaynak_url, timeout=15000)
+            if yanit.status == 404:
+                anomaliler.append(
+                    f"⊘ Kaynakta yok (404): {dosya_adi} [{kategori_yolu_goster(ana_kategori, alt_kategori)}]"
+                )
+                continue
+            if yanit.status != 200:
+                # Diğer durum kodları (503 WAF vb.) kesin bir sinyal değil,
+                # tek bir HEAD isteğiyle yanlış alarm üretmemek için atlanır.
+                continue
+            uzunluk_str = yanit.headers.get("content-length")
+            if uzunluk_str:
+                yerel_yol = os.path.join(
+                    PDF_KOK_KLASOR, ana_kategori, klasor_adi_guvenli(alt_kategori), dosya_adi
+                )
+                if os.path.exists(yerel_yol):
+                    yerel_boyut = os.path.getsize(yerel_yol)
+                    # birkaç baytlık fark (WAF'ın eklediği görünmez bir şey
+                    # olabilir) yanlış alarm sayılmasın diye küçük bir pay var.
+                    if abs(int(uzunluk_str) - yerel_boyut) > 50:
+                        anomaliler.append(
+                            f"✎ Boyut değişmiş olabilir: {dosya_adi} "
+                            f"[{kategori_yolu_goster(ana_kategori, alt_kategori)}] "
+                            f"(yerelde: {yerel_boyut} bayt, kaynakta: {uzunluk_str} bayt)"
+                        )
+        except Exception:
+            # Tek bir HEAD hatası (zaman aşımı vb.) derin taramanın
+            # tamamını durdurmamalı -- sadece bu dosya atlanır.
+            continue
+        time.sleep(0.3)  # siteye nazik davranmak için her istek arasında kısa bekleme
+
+    print(f"✓ Derin tarama tamamlandı: {kontrol_edilen} PDF kontrol edildi, {len(anomaliler)} anomali bulundu.")
+    return kontrol_edilen, anomaliler
+
+
 def botu_calistir():
     tabloyu_olustur()
     indirilen = 0
@@ -637,6 +735,7 @@ def botu_calistir():
         context = browser.new_context()
         page = context.new_page()
 
+        site_tumuyle_erisilir_mi = True
         for tip, url, alt_kategori_listesi in URLS:
             print(f"\n{'='*60}")
             print(f"KATEGORİ: {tip.upper()}")
@@ -645,6 +744,7 @@ def botu_calistir():
 
             if not _site_erisilebilir_mi(page, url):
                 print(f"✗ {url} adresine erişilemiyor, bu bölüm atlanıyor.")
+                site_tumuyle_erisilir_mi = False
                 if _mesai_saatinde_mi():
                     admin_kritik_uyari(f"cetatenie.just.ro ({url}) şu anda erişilemiyor gibi görünüyor.")
                 else:
@@ -952,6 +1052,39 @@ def botu_calistir():
 
             time.sleep(2)
 
+        # 2026-09-02 (kullanıcı isteği): haftalık hafif derin tarama --
+        # SADECE pazar günü, SADECE günlük tarama sitede erişim sorunu
+        # yaşamadıysa (aksi halde "o hafta pas geçildi" olarak kaydedilir,
+        # sessizce atlanmaz). Ana taramayı ASLA engellememeli, bu yüzden
+        # tamamen ayrı bir try/except içinde, browser kapanmadan ÖNCE
+        # (context.request hâlâ kullanılabilir olsun diye).
+        if _derin_tarama_gunu_mu():
+            try:
+                if site_tumuyle_erisilir_mi:
+                    _derin_kontrol_edilen, _derin_anomaliler = _derin_taramayi_calistir(context)
+                    _derin_olay_conn = veritabani_baglantisi(DB_FILE)
+                    sistem_olayi_kaydet(
+                        _derin_olay_conn, "derin_tarama_tamamlandi",
+                        f"{_derin_kontrol_edilen} PDF kontrol edildi, {len(_derin_anomaliler)} anomali bulundu.",
+                    )
+                    _derin_olay_conn.close()
+                    if _derin_anomaliler:
+                        _gosterilecekler = _derin_anomaliler[:15]
+                        _mesaj = "🔎 Haftalık derin tarama -- anomali bulundu:\n\n" + "\n".join(_gosterilecekler)
+                        if len(_derin_anomaliler) > 15:
+                            _mesaj += f"\n\n(+{len(_derin_anomaliler) - 15} anomali daha, admin panelinde tam liste yok -- Render loglarına bakılmalı.)"
+                        admin_kritik_uyari(_mesaj)
+                else:
+                    _derin_olay_conn = veritabani_baglantisi(DB_FILE)
+                    sistem_olayi_kaydet(
+                        _derin_olay_conn, "derin_tarama_pas_gecildi",
+                        "Bu haftaki derin tarama pas geçildi -- site bugünkü günlük taramada erişilemez durumdaydı.",
+                    )
+                    _derin_olay_conn.close()
+                    print("⊘ Derin tarama pas geçildi: site bugün erişilemez durumdaydı.")
+            except Exception as e:
+                print(f"✗ Derin tarama hatası: {str(e)[:80]}")
+
         browser.close()
 
     kontrol_conn.close()
@@ -997,6 +1130,21 @@ def botu_calistir():
         _olay_conn.close()
     except Exception as e:
         print(f"✗ Tarama olay kaydı başarısız: {str(e)[:80]}")
+
+    # 2026-09-02 EKLENTİSİ (kullanıcı isteği -- admin panelinde "Tarama
+    # Geçmişi" sayfası): bu taramanın TAM özeti + her yeni kaydın hangi
+    # kategori/PDF'ten geldiği kalıcı olarak yazılıyor. Ana akışı ASLA
+    # engellememeli -- ayrı try/except.
+    try:
+        _tarih_conn = veritabani_baglantisi(DB_FILE)
+        tarama_gecmisine_kaydet(
+            _tarih_conn, "gunluk",
+            datetime.now(ROMANYA_SAAT_DILIMI).strftime("%Y-%m-%d %H:%M:%S"),
+            toplam_pdf_bulunan, kaydedilen_kayit, tum_yeni_kayitlar,
+        )
+        _tarih_conn.close()
+    except Exception as e:
+        print(f"✗ Tarama geçmişi kaydı başarısız: {str(e)[:80]}")
 
     # 2026-08-20 (sıra tahmini özelliği): her taramadan sonra "hâlâ
     # bekleyen" listesi yeniden hesaplanıyor -- yeni ordine eşleşmeleri
