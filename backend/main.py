@@ -1179,52 +1179,6 @@ def admin_bugunun_durumu(_giris=Depends(admin_girisini_dogrula)):
         conn.close()
 
 
-@app.post("/api/admin/_gecici_b2_test")
-def _gecici_b2_test(_yetki=Depends(nobetci_anahtarini_dogrula)):
-    """2026-09-02 GECICI TESHIS UCU -- Backblaze multipart zaman asimi
-    duzeltmesini gerce 03:00'i beklemeden canli dogrulamak icin. Senkron
-    calisir (istek birkac dakika surebilir, ~1GB'lik DB kopyalaniyor +
-    yukleniyor) -- dogrulama biter bitmez KALDIRILACAK."""
-    sonuc = veritabani_yedekle()
-    return {"sonuc": sonuc}
-
-
-@app.post("/api/admin/_gecici_b2_ham_baglanti_testi")
-def _gecici_b2_ham_baglanti_testi(_yetki=Depends(nobetci_anahtarini_dogrula)):
-    """2026-09-02 GECICI TESHIS UCU -- boto3'u devre disi birakip DUZ bir
-    HTTP istegiyle B2_ENDPOINT'e (TCP/TLS seviyesinde) gercekten
-    ulasilabiliyor mu diye bakar."""
-    import requests as _requests
-    sonuclar = {}
-    try:
-        r = _requests.get(B2_ENDPOINT, timeout=15)
-        sonuclar["duz_get"] = {"durum_kodu": r.status_code, "govde_ilk_200": r.text[:200]}
-    except Exception as e:
-        sonuclar["duz_get"] = {"hata": str(e)[:300]}
-    try:
-        r2 = _requests.head(f"{B2_ENDPOINT}/{B2_BUCKET_ADI}", timeout=15)
-        sonuclar["bucket_head"] = {"durum_kodu": r2.status_code}
-    except Exception as e:
-        sonuclar["bucket_head"] = {"hata": str(e)[:300]}
-    return sonuclar
-
-
-@app.post("/api/admin/_gecici_b2_kucuk_test")
-def _gecici_b2_kucuk_test(_yetki=Depends(nobetci_anahtarini_dogrula)):
-    """2026-09-02 GECICI TESHIS UCU -- sorunun BUYUK dosyaya mi yoksa
-    genel B2 baglantisina mi ozgu oldugunu ayirt etmek icin, sadece
-    birkac baytlik minik bir test dosyasi yukler."""
-    import tempfile
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-        f.write("test")
-        gecici_yol = f.name
-    try:
-        sonuc = b2_yedegini_yukle(gecici_yol)
-    finally:
-        os.remove(gecici_yol)
-    return {"sonuc": sonuc}
-
-
 @app.get("/api/admin/saglik-kontrolu")
 def admin_saglik_kontrolu(_yetki=Depends(nobetci_anahtarini_dogrula)):
     """Gece Nobeti (7/24 izleme, 2026-08-30) icin makineler-arasi saglik
