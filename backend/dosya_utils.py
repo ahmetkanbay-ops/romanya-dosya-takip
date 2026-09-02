@@ -662,6 +662,17 @@ def tabloyu_hazirla(conn):
     # hızlanıyordu, "durum" için ayrı bir indeks yoktu.
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_dosya_durum ON dosyalar(durum)")
 
+    # 2026-09-03 EKLENTISI (/api/admin/pdf-listesi -- yerel PDF senkronizasyonu):
+    # bu uc "SELECT DISTINCT ana_kategori, alt_kategori, pdf_dosya" calistiriyor.
+    # Indekssiz, 1.3M+ satirlik tabloda bu sorgu YEREL testte 16 SANIYE surdu
+    # -- WEB_CONCURRENCY=1 sunucuda kabul edilemez. Bu indeks SADECE bu
+    # kolonlari kapsadigi icin (covering index) SQLite tam tablo taramasi
+    # yerine dogrudan indeksten DISTINCT sonucu uretebiliyor.
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_dosya_pdf_listesi "
+        "ON dosyalar(ana_kategori, alt_kategori, pdf_dosya)"
+    )
+
     # 2026-08-30 EKLENTİSİ (Gece Nöbeti -- Faz 1): admin panelinin (PWA)
     # tarayıcı-native Web Push aboneliklerini tutar. push_tokenlari
     # tablosuyla KARIŞTIRMAMALI -- o, mobil uygulamanın Expo push

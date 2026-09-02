@@ -1179,6 +1179,33 @@ def admin_bugunun_durumu(_giris=Depends(admin_girisini_dogrula)):
         conn.close()
 
 
+@app.get("/api/admin/pdf-listesi")
+def admin_pdf_listesi(_yetki=Depends(nobetci_anahtarini_dogrula)):
+    """
+    2026-09-03 EKLENTİSİ (kullanıcı isteği -- Backblaze'e PDF'lerin kendisi
+    yedeklenmiyor, tek koruma yerel bilgisayara haftalık senkronizasyon):
+    Render'da bilinen TÜM PDF dosyalarının (ana_kategori, alt_kategori,
+    dosya_adi) listesini döner -- sadece metadata, dosya içeriği değil,
+    bu yüzden hafif bir sorgu. Yerel senkronizasyon scripti (bkz.
+    scripts/pdf_senkronize.py) bu listeyi kendi diskindekiyle karşılaştırıp
+    SADECE eksik olanları indirir -- zaten var olanlar tekrar indirilmez.
+    """
+    conn = veritabani_baglantisi(DB_FILE, row_factory=sqlite3.Row)
+    try:
+        satirlar = conn.execute(
+            "SELECT DISTINCT ana_kategori, alt_kategori, pdf_dosya "
+            "FROM dosyalar WHERE pdf_dosya IS NOT NULL"
+        ).fetchall()
+    finally:
+        conn.close()
+    return {
+        "pdfler": [
+            {"ana_kategori": s["ana_kategori"], "alt_kategori": s["alt_kategori"], "pdf_dosya": s["pdf_dosya"]}
+            for s in satirlar
+        ]
+    }
+
+
 @app.get("/api/admin/saglik-kontrolu")
 def admin_saglik_kontrolu(_yetki=Depends(nobetci_anahtarini_dogrula)):
     """Gece Nobeti (7/24 izleme, 2026-08-30) icin makineler-arasi saglik
