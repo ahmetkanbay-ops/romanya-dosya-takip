@@ -357,6 +357,22 @@ def _metrikleri_hesapla_ham(conn, db_dosyasi, son_basarili_tarama):
     c.execute("SELECT COUNT(*) FROM dosyalar")
     toplam_kayit = c.fetchone()[0]
 
+    # 2026-09-03 EKLENTİSİ (kullanıcı isteği): "Toplam kayıt" tek başına
+    # bir referans noktası olmadan anlamsız (kullanıcı: "geçen haftaki
+    # sayıyı ben tutmuyorum ki artışı görebileyim"). tarama_gecmisi
+    # tablosundan (bkz. dosya_utils.tarama_gecmisine_kaydet) son 7 günde
+    # eklenen TOPLAM yeni kayıt sayısı buradan hesaplanıp ayrı bir kart
+    # olarak gösteriliyor -- kullanıcının hiçbir şey not almasına gerek
+    # kalmadan "bu hafta ne kadar arttı" sorusuna direkt cevap. Bu sütun
+    # (tarama_zamani) ROMANYA yerel saatiyle yazılıyor (bkz. bot.py) --
+    # sistem_olaylari'nın aksine burada UTC çevrimi YAPILMAMALI.
+    esik_yerel = (simdi - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+    c.execute(
+        "SELECT COALESCE(SUM(yeni_kayit_sayisi), 0) FROM tarama_gecmisi WHERE tarama_zamani >= ?",
+        (esik_yerel,),
+    )
+    bu_hafta_eklenen = c.fetchone()[0]
+
     c.execute("SELECT ana_kategori, COUNT(*) FROM dosyalar GROUP BY ana_kategori")
     kategori_dagilimi = dict(c.fetchall())
 
@@ -426,6 +442,7 @@ def _metrikleri_hesapla_ham(conn, db_dosyasi, son_basarili_tarama):
             "son_basarili_tarama": son_basarili_tarama,
             "son_tarama_detay": son_tarama_detay,
             "toplam_kayit": toplam_kayit,
+            "bu_hafta_eklenen": bu_hafta_eklenen,
             "kategori_dagilimi": kategori_dagilimi,
             "durum_dagilimi": durum_dagilimi,
             "kritik_uyari_7gun": kritik_uyari_7gun,
@@ -845,23 +862,12 @@ def admin_sayfa_html(m):
   <script src="/statik/admin/bugunun-durumu.js"></script>
 
   <div class="bolum">
-    <p class="bolum-baslik">🔦 Gece Nöbeti Bildirimleri</p>
-    <div id="nobetci-push-durum" class="durum-satir" style="border-left-color:#9aa3b2">
-      <span class="durum-ikon">⏳</span>
-      <span class="durum-mesaj">Kontrol ediliyor…</span>
-    </div>
-    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
-      <button id="nobetci-push-izin-buton" class="nobetci-buton">Bildirimlere İzin Ver</button>
-      <button id="nobetci-push-test-buton" class="nobetci-buton" style="display:none">Test Bildirimi Gönder</button>
-    </div>
-  </div>
-  <!-- bugunun-durumu.js'teki CSP notuyla aynı sebepten ayrı dosya. -->
-  <script src="/statik/admin/nobetci-push.js"></script>
-
-  <div class="bolum">
     <p class="bolum-baslik">Kullanıcılar</p>
+    <p style="margin:0 0 10px;font-size:12.5px;color:var(--metin-ikincil)">
+      Gerçek Play Store yükleme sayısı için <a href="https://play.google.com/console" target="_blank" style="color:var(--metin-ikincil)">Play Console → İstatistikler</a>'e bakın — buradaki sayılar sadece bildirim izni verilmiş cihazları sayar (bir kısmı hiç izin vermemiş olabilir).
+    </p>
     <div class="kart-izgara">
-      <div class="kart"><div class="rakam">{k['toplam_cihaz']}</div><div class="etiket">Toplam cihaz</div></div>
+      <div class="kart"><div class="rakam">{k['toplam_cihaz']}</div><div class="etiket">Bildirim kaydı olan cihaz</div></div>
       <div class="kart"><div class="rakam">{k['yeni_bugun']}</div><div class="etiket">Bugün yeni</div></div>
       <div class="kart"><div class="rakam">{k['yeni_hafta']}</div><div class="etiket">Bu hafta yeni</div></div>
       <div class="kart"><div class="rakam">{k['yeni_ay']}</div><div class="etiket">Bu ay yeni</div></div>
@@ -871,9 +877,10 @@ def admin_sayfa_html(m):
   </div>
 
   <div class="bolum">
-    <p class="bolum-baslik">Sistem / Bot Sağlığı</p>
+    <p class="bolum-baslik">Render / Sistem / Bot Sağlığı</p>
     <div class="kart-izgara">
       <div class="kart"><div class="rakam">{s['toplam_kayit']}</div><div class="etiket">Toplam kayıt</div></div>
+      <div class="kart"><div class="rakam">+{s['bu_hafta_eklenen']}</div><div class="etiket">Bu hafta eklenen</div></div>
       <div class="kart"><div class="rakam">{s['kritik_uyari_7gun']}</div><div class="etiket">Kritik uyarı (7 gün)</div></div>
       <div class="kart"><div class="rakam" style="font-size:17px">{s['disk']['db_boyutu']}</div><div class="etiket">Veritabanı boyutu</div></div>
       <div class="kart"><div class="rakam" style="font-size:17px">{s['disk']['pdf_boyutu']}</div><div class="etiket">PDF klasörü boyutu</div></div>
