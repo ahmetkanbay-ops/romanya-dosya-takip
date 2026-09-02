@@ -758,8 +758,8 @@ def admin_sayfa_html(m):
     display: flex; align-items: center; gap: 10px;
   }}
   header.ustbilgi h1 img.profil-avatar {{
-    width: 34px; height: 34px; border-radius: 50%; object-fit: cover;
-    border: 2px solid var(--altin); flex-shrink: 0;
+    width: 64px; height: 64px; border-radius: 50%; object-fit: cover;
+    border: 3px solid var(--altin); flex-shrink: 0;
   }}
   header.ustbilgi .zaman {{ font-size: 12.5px; color: var(--metin-ikincil); }}
 
