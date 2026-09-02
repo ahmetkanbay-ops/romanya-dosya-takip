@@ -60,6 +60,9 @@ backend/teshis/
 # Bot'un her taramadan sonra yazdığı "son başarılı tarama" zaman damgası --
 # üretilen/değişken bir durum dosyası, git'e girmemeli.
 backend/son_basarili_tarama.txt
+# 2026-09-03: haftalık PDF senkronizasyon scriptinin (scripts/pdf_senkronize.py)
+# ürettiği log -- değişken/üretilen dosya, git'e girmemeli.
+backend/pdf_senkron_log.txt
 backend/__pycache__/
 __pycache__/
 *.pyc
