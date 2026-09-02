@@ -1179,16 +1179,6 @@ def admin_bugunun_durumu(_giris=Depends(admin_girisini_dogrula)):
         conn.close()
 
 
-@app.post("/api/admin/_gecici_b2_dogrulama")
-def _gecici_b2_dogrulama(_yetki=Depends(nobetci_anahtarini_dogrula)):
-    """2026-09-03 GECICI TESHIS UCU -- kullanici Backblaze'e kart ekleyip
-    Daily Storage Cap'i kaldirdi (onceden 10GB idi, kart eklenince
-    otomatik "No Cap" oldu) -- bunun gercekten calisip calismadigini
-    canli dogrulamak icin. Dogrulama biter bitmez KALDIRILACAK."""
-    sonuc = veritabani_yedekle()
-    return {"sonuc": sonuc}
-
-
 @app.get("/api/admin/saglik-kontrolu")
 def admin_saglik_kontrolu(_yetki=Depends(nobetci_anahtarini_dogrula)):
     """Gece Nobeti (7/24 izleme, 2026-08-30) icin makineler-arasi saglik
