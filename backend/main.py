@@ -644,6 +644,22 @@ def disk_kotasi_kontrol_et():
             )
         else:
             print(f"✓ Disk kotası kontrolü: %{yuzde:.1f} dolu, {bos_gb:.2f} GB boş (eşik: %{DISK_UYARI_ESIK_YUZDE}).")
+
+        # 2026-09-03 EKLENTİSİ (kullanıcı isteği): her kontrolde bir
+        # anlık görüntü kaydediliyor -- admin panelindeki büyüme hızı
+        # tahmini buradan besleniyor. Ana kontrolü ASLA engellememeli,
+        # ayrı try/except.
+        try:
+            _disk_conn = veritabani_baglantisi(DB_FILE)
+            _disk_conn.execute(
+                "INSERT INTO disk_kullanim_gecmisi (disk_yuzde, disk_kullanilan_bayt, disk_toplam_bayt) "
+                "VALUES (?, ?, ?)",
+                (yuzde, kullanilan, toplam),
+            )
+            _disk_conn.commit()
+            _disk_conn.close()
+        except Exception as e:
+            print(f"✗ Disk kullanım geçmişi kaydı başarısız: {str(e)[:80]}")
     except Exception as e:
         print(f"✗ Disk kotası kontrolü hatası: {e}")
 

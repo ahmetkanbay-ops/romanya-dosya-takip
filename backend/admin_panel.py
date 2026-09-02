@@ -264,6 +264,64 @@ def _klasor_boyutu(yol):
     return toplam
 
 
+# main.py'deki DISK_UYARI_ESIK_YUZDE ile AYNI tutulmali (döngüsel import
+# önlemek için burada ayrı bir sabit olarak tutuluyor).
+_DISK_BUYUME_UYARI_ESIGI = 80
+
+
+def disk_buyume_tahmini_hesapla(conn):
+    """
+    2026-09-03 EKLENTİSİ (kullanıcı isteği -- "disk kendiliğinden düşmez,
+    riskli değil mi" sorusuna TAHMİN değil GERÇEK veriyle cevap):
+    disk_kullanim_gecmisi tablosundaki (main.py disk_kotasi_kontrol_et,
+    günde 1 kez doldurur) en eski ve en yeni kaydı karşılaştırıp günlük
+    ortalama büyüme yüzdesini ve %80 eşiğine kaç gün kaldığını hesaplar.
+
+    En az 3 günlük gözlem olmadan güvenilir bir tahmin yapılamaz -- bu
+    durumda "yeterli_veri_yok" ile döner, panel bunu açıkça belirtir
+    (uydurma bir sayı göstermek yerine).
+    """
+    satir_ilk = conn.execute(
+        "SELECT zaman, disk_yuzde FROM disk_kullanim_gecmisi ORDER BY id ASC LIMIT 1"
+    ).fetchone()
+    satir_son = conn.execute(
+        "SELECT zaman, disk_yuzde FROM disk_kullanim_gecmisi ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    if not satir_ilk or not satir_son:
+        return {"yeterli_veri_yok": True}
+
+    try:
+        ilk_zaman = datetime.strptime(satir_ilk[0], "%Y-%m-%d %H:%M:%S")
+        son_zaman = datetime.strptime(satir_son[0], "%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return {"yeterli_veri_yok": True}
+
+    gun_farki = (son_zaman - ilk_zaman).total_seconds() / 86400
+    if gun_farki < 3:
+        return {"yeterli_veri_yok": True, "gozlem_gun_sayisi": gun_farki}
+
+    ilk_yuzde, son_yuzde = satir_ilk[1], satir_son[1]
+    gunluk_ortalama = (son_yuzde - ilk_yuzde) / gun_farki
+
+    if gunluk_ortalama <= 0:
+        return {
+            "yeterli_veri_yok": False,
+            "buyuyor_mu": False,
+            "gozlem_gun_sayisi": gun_farki,
+        }
+
+    kalan_yuzde = max(0.0, _DISK_BUYUME_UYARI_ESIGI - son_yuzde)
+    tahmini_gun = kalan_yuzde / gunluk_ortalama
+    return {
+        "yeterli_veri_yok": False,
+        "buyuyor_mu": True,
+        "gunluk_ortalama": gunluk_ortalama,
+        "haftalik_ortalama": gunluk_ortalama * 7,
+        "tahmini_gun_esige": tahmini_gun,
+        "gozlem_gun_sayisi": gun_farki,
+    }
+
+
 def _disk_kullanimini_hesapla(db_dosyasi):
     onbellek = _disk_boyutu_onbellek
     if onbellek["veri"] is not None and (time.time() - onbellek["zaman"]) < _ONBELLEK_SURESI_SN:
@@ -395,6 +453,7 @@ def _metrikleri_hesapla_ham(conn, db_dosyasi, son_basarili_tarama):
     son_kritik_uyarilar = c.fetchall()
 
     disk = _disk_kullanimini_hesapla(db_dosyasi)
+    disk["buyume"] = disk_buyume_tahmini_hesapla(conn)
 
     # --- 3) Bildirim etkinliği ---------------------------------------------
     c.execute(
@@ -731,6 +790,21 @@ def admin_sayfa_html(m):
         for ad, sayi in s["durum_dagilimi"].items()
     ) or '<p class="bos">Henüz veri yok.</p>'
 
+    # 2026-09-03 (kullanıcı isteği): disk büyüme tahmini -- gerçek veriye
+    # dayalı, en az 3 günlük gözlem birikene kadar dürüstçe "henüz yeterli
+    # veri yok" gösterir (uydurma bir sayı göstermek yerine).
+    _buyume = s["disk"].get("buyume") or {}
+    if _buyume.get("yeterli_veri_yok"):
+        buyume_metni = "Henüz yeterli geçmiş veri yok -- güvenilir bir tahmin için en az birkaç günlük gözlem gerekiyor, birkaç gün sonra burada gerçek büyüme hızı görünecek."
+    elif not _buyume.get("buyuyor_mu"):
+        buyume_metni = f"Son {_buyume['gozlem_gun_sayisi']:.0f} günde büyüme gözlenmedi -- şu an için risk yok."
+    else:
+        buyume_metni = (
+            f"Son {_buyume['gozlem_gun_sayisi']:.0f} günün ortalamasına göre haftada ~%{_buyume['haftalik_ortalama']:.2f} büyüyor. "
+            f"Bu hızla giderse %{_DISK_BUYUME_UYARI_ESIGI} uyarı eşiğine ulaşmak yaklaşık "
+            f"<b>{_buyume['tahmini_gun_esige']:.0f} gün</b> sürer."
+        )
+
     son_tarama_metin = "Hiç tarama kaydı yok."
     if s["son_basarili_tarama"]:
         try:
@@ -891,6 +965,7 @@ def admin_sayfa_html(m):
       <p style="margin:0 0 2px;font-size:13.5px">%{s['disk']['disk_yuzde']:.1f} dolu
         <span style="color:var(--metin-ikincil)">({s['disk']['disk_bos']} boş / {s['disk']['disk_toplam']} toplam)</span></p>
       <div class="donusum-cubuk-zemin"><div class="donusum-cubuk-dolu" style="width:{min(s['disk']['disk_yuzde'],100):.1f}%{';background:#d9534f' if s['disk']['disk_yuzde'] >= 80 else ''}"></div></div>
+      <p style="margin:10px 0 0;font-size:12.5px;color:var(--metin-ikincil)">{buyume_metni}</p>
     </div>
 
     <div class="genis-kart">

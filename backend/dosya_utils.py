@@ -708,6 +708,23 @@ def tabloyu_hazirla(conn):
         )
     """)
 
+    # 2026-09-03 EKLENTISI (kullanici istegi -- "disk kendiliginden dusmez"
+    # uyarisi sonrasi): disk_kotasi_kontrol_et() her calistiginda (gunde 1
+    # kez, 06:00) buraya BIR SATIR ekler. Amac: "haftada ne kadar buyuyor"
+    # sorusuna TAHMIN degil GERCEK veriyle cevap verebilmek -- admin
+    # panelinde bu tablodan hesaplanan bir buyume hizi/tahmini sure
+    # gosteriliyor (bkz. admin_panel.py disk_buyume_tahmini_hesapla).
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS disk_kullanim_gecmisi (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            zaman TEXT DEFAULT CURRENT_TIMESTAMP,
+            disk_yuzde REAL NOT NULL,
+            disk_kullanilan_bayt INTEGER NOT NULL,
+            disk_toplam_bayt INTEGER NOT NULL
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_disk_kullanim_zaman ON disk_kullanim_gecmisi(zaman)")
+
     # 2026-09-02 EKLENTISI (kullanici istegi): her taramanin OZETINI kalici
     # tutar -- admin panelindeki "Tarama Gecmisi" sayfasi buradan besleniyor.
     # sistem_olaylari'ndaki "tarama_tamamlandi" olayi SADECE bir metin
