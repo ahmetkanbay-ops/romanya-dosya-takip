@@ -753,7 +753,14 @@ def admin_sayfa_html(m):
     display: flex; justify-content: space-between; align-items: baseline;
     margin-bottom: 22px; flex-wrap: wrap; gap: 8px;
   }}
-  header.ustbilgi h1 {{ font-size: 20px; margin: 0; color: var(--lacivert-koyu); }}
+  header.ustbilgi h1 {{
+    font-size: 20px; margin: 0; color: var(--lacivert-koyu);
+    display: flex; align-items: center; gap: 10px;
+  }}
+  header.ustbilgi h1 img.profil-avatar {{
+    width: 34px; height: 34px; border-radius: 50%; object-fit: cover;
+    border: 2px solid var(--altin); flex-shrink: 0;
+  }}
   header.ustbilgi .zaman {{ font-size: 12.5px; color: var(--metin-ikincil); }}
 
   .bolum {{ margin-bottom: 26px; }}
@@ -816,7 +823,7 @@ def admin_sayfa_html(m):
 <body>
 <div class="sayfa">
   <header class="ustbilgi">
-    <h1>📊 Admin Paneli</h1>
+    <h1><img class="profil-avatar" src="/statik/admin/profil-foto.jpg" alt=""> Admin Paneli</h1>
     <span class="zaman">Oluşturulma: {m['olusturma_zamani']} · <a href="/admin/tarama-gecmisi" style="color:var(--metin-ikincil)">Tarama Geçmişi →</a></span>
   </header>
 
