@@ -256,7 +256,15 @@ if SENTRY_DSN and _RENDER_ORTAMI:
 elif SENTRY_DSN and not _RENDER_ORTAMI:
     print("ℹ️  SENTRY_DSN ayarlı ama yerel ortamdayız (RENDER yok) -- Sentry BİLEREK devre dışı, canlı hata izlemesi kirlenmesin diye.")
 
-app = FastAPI()
+# 2026-09-05 (güvenlik taramasi): docs_url/redoc_url/openapi_url
+# varsayilan olarak ACIKTI -- /docs, /redoc, /openapi.json herkese
+# API'nin TUM uc nokta listesini, parametrelerini ve semalarini
+# veriyordu (kimlik dogrulamali admin uclari dahil -- korumali olsalar
+# bile isim/sema olarak gorunur kaliyordu, bu da saldirgana bedava
+# kesif/enumeration kolayligi saglar). Bu API zaten sadece mobil
+# uygulama tarafindan cagriliyor (asagidaki CORS notuna bkz.), yani
+# interaktif Swagger arayuzune gercek bir ihtiyac yok -- kapatildi.
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
 if _SLOWAPI_VAR:
     # Kullanıcının istediği "korsan/kötüye kullanıma karşı üst düzey koruma"
@@ -372,14 +380,30 @@ init_db()
 os.makedirs(PDF_KOK_KLASOR, exist_ok=True)
 app.mount("/pdfs", StaticFiles(directory=PDF_KOK_KLASOR), name="pdfs")
 
-# 2026-08-20 (tanıtım web sayfası): ekran görüntüleri gibi sabit, koda
-# gömülü (kullanıcı verisi İÇERMEYEN) statik varlıklar için ayrı bir
-# klasör -- PDF_KOK_KLASOR'dan (kullanıcı verisiyle dolu, DATA_DIR'e
-# taşınan) BİLEREK ayrı tutuluyor, bu klasör git'e commit'lenip normal
-# kod gibi deploy ediliyor.
+# 2026-09-05 (yavaş sayfa açılışı teşhisi): /statik altındaki dosyalar
+# (tanıtım videosu 10.3MB, 5 ekran görüntüsü ~600KB) hiç Cache-Control
+# başlığı taşımıyordu -- Cloudflare bu yüzden her isteği DYNAMIC (edge'de
+# önbelleksiz) olarak Render'daki (Oregon) sunucuya yönlendiriyordu, yani
+# aynı ziyaretçi sayfayı ikinci kez açsa/videoyu tekrar oynatsa bile HER
+# SEFERİNDE tüm dosya baştan indiriliyordu. Bu dosyalar git'e commit'lenip
+# koddan deploy edildiği için (yukarıdaki not) -- sadece bir deploy
+# sırasında değişebilirler, ETag/Last-Modified zaten Starlette tarafından
+# otomatik ekleniyor (koşullu istek/304 için). 1 günlük max-age + tarayıcı
+# yine de ETag ile doğrulama yapabilsin diye no-transform DIŞINDA katı bir
+# şey eklemedik -- nadir bir asset güncellemesinde en kötü ihtimalle 1 gün
+# eski dosya görünür, karşılığında tekrar ziyaretlerde/video tekrar
+# oynatmada sıfır ağ trafiği kazanılır.
+class _OnbellekliStatikDosyalar(StaticFiles):
+    async def get_response(self, path: str, scope):
+        yanit = await super().get_response(path, scope)
+        if yanit.status_code < 400:
+            yanit.headers["Cache-Control"] = "public, max-age=86400"
+        return yanit
+
+
 _STATIK_KLASOR = os.path.join(BASE_DIR, "statik")
 if os.path.isdir(_STATIK_KLASOR):
-    app.mount("/statik", StaticFiles(directory=_STATIK_KLASOR), name="statik")
+    app.mount("/statik", _OnbellekliStatikDosyalar(directory=_STATIK_KLASOR), name="statik")
 
 # Scheduler kurulumu
 scheduler = BackgroundScheduler(timezone=ROMANYA_SAAT_DILIMI)

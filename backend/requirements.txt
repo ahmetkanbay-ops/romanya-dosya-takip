@@ -11,7 +11,15 @@ uvicorn[standard]==0.52.1
 pydantic==2.13.4
 apscheduler==3.11.3
 playwright==1.62.0
-pypdf==6.15.0
+# 2026-09-05 (güvenlik taramasi, pip-audit): 6.15.0'da 3 CVE vardi
+# (CVE-2026-84309/84310/84311) -- kotu hazirlanmis bir PDF, TreeObject
+# dongusu / ic ice outline / XForm genislemesi uzerinden sonsuz
+# donguye ya da CPU/bellek tuketimine yol aciyordu. WEB_CONCURRENCY=1
+# oldugu icin (tek surec) boyle bir PDF tum sunucuyu kilitleyebilirdi.
+# pypdf sadece bot.py/aktar.py'de cetatenie.just.ro'dan indirilen
+# PDF'leri okumak icin kullaniliyor (kullanici yuklemesi yok) ama
+# tedarik zinciri riskini kapatmak icin 6.16.1'e sabitlendi.
+pypdf==6.16.1
 beautifulsoup4==4.15.0
 requests==2.34.2
 # gunicorn: bu makinede (Windows) kurulu değil -- Unix'e özgü bir paket,
