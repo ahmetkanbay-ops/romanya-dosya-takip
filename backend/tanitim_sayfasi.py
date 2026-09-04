@@ -112,6 +112,27 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
 <!-- 2026-08-23: Google Search Console site sahipliği doğrulaması --
      kaldırmayın, doğrulanmış durumu bu etikete bağlı. -->
 <meta name="google-site-verification" content="9ZHuCTWpd557SMeinm3TsH9kGUjD8y4T7uMBArv9iOk" />
+<!-- 2026-09-05 (SEO taraması): canonical + Open Graph/Twitter Card yoktu --
+     paylaşıldığında (WhatsApp/sosyal medya) kart/önizleme çıkmıyordu, ayrıca
+     Google'a "tekil, kalıcı adres burası" sinyali eksikti. NOT: bunlar
+     "neden Google'ın ana arama sonuçlarında çıkmıyoruz" sorusunun kök
+     çözümü DEĞİL (o, sıfır backlink + yeni/paylaşılan onrender.com alt
+     alan adı kaynaklı bir otorite meselesi, bkz. yapilacaklar-listesi
+     hafıza notu) -- ama eksik olduğu doğrulandığı için düzeltildi. -->
+<link rel="canonical" href="https://romanya-dosya-takip.onrender.com/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://romanya-dosya-takip.onrender.com/">
+<meta property="og:site_name" content="Romanya Dosya Takip">
+<meta property="og:locale" content="tr_TR">
+<meta property="og:title" content="Romanya Dosya Takip">
+<meta property="og:description" content="Romanya vatandaşlık başvurunuzun Stadiu Dosar ve Ordine durumunu anında sorgulayın, onaylandığında otomatik bildirim alın.">
+<meta property="og:image" content="https://romanya-dosya-takip.onrender.com/statik/landing/tanitim-video-poster.jpg">
+<meta property="og:image:width" content="1920">
+<meta property="og:image:height" content="1080">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Romanya Dosya Takip">
+<meta name="twitter:description" content="Romanya vatandaşlık başvurunuzun Stadiu Dosar ve Ordine durumunu anında sorgulayın, onaylandığında otomatik bildirim alın.">
+<meta name="twitter:image" content="https://romanya-dosya-takip.onrender.com/statik/landing/tanitim-video-poster.jpg">
 <style>
   :root {{
     --lacivert-koyu: #0f1a2e;
