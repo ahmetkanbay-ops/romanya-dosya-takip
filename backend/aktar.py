@@ -161,7 +161,62 @@ def pdf_verilerini_ice_aktar(pdf_yolu, ana_kategori, alt_kategori, kaynak_url=No
     guvenli_commit(conn)
     conn.close()
     print(f"✓ {eklenen} dosya kaydedildi ({len(yeni_kayitlar)} yeni).\n")
+
+    # 2026-09-06 EKLENTİSİ (kullanıcı isteği -- "Articolul 10" 1-2 haneli
+    # numara sorununun bir daha SESSİZCE yaşanmaması için): bu PDF'ten
+    # BİRAZ ÖNCE çıkarılan numaraların gerçekten veritabanında (bir sonraki
+    # gerçek kullanıcı sorgusunun kullanacağı AYNI sorgu şekliyle)
+    # bulunabildiğini kendi kendine doğrular. Öncelik 1-2 haneli (kısa)
+    # numaralara verilir -- geçmişte kırılan tam olarak bu grup. Bir
+    # uyuşmazlık bulunursa (extraction "var" diyor ama DB'den okunamıyor)
+    # admin'e ANINDA Telegram uyarısı gider -- kullanıcının "sistem kendi
+    # mantığını bilmeli, bize otomatik haber vermeli" isteği budur.
+    _ice_aktarma_tutarliligini_dogrula(bulunanlar, ana_kategori, alt_kategori, dosya_adi)
+
     return eklenen, yeni_kayitlar
+
+
+def _ice_aktarma_tutarliligini_dogrula(bulunanlar, ana_kategori, alt_kategori, dosya_adi):
+    """Bir PDF'ten çıkarılan numaraların GERÇEKTEN sorgulanabilir olduğunu
+    kendi kendine test eder -- yeni bir bağlantıyla, gerçek bir kullanıcı
+    sorgusuyla BİREBİR aynı şekilde (dosya_no_norm + yil + ana_kategori +
+    alt_kategori TAM eşleşme) okur. Sadece uyarı amaçlı: burada bir hata
+    olsa bile ana aktarım işlemini ASLA bozmaz/durdurmaz (try/except ile
+    tamamen izole)."""
+    try:
+        if not bulunanlar:
+            return
+        # Kısa (1-2 haneli) numaralar önceliklidir -- en fazla 5 örnek,
+        # bulunamazsa rastgele diğerlerinden tamamlanır (hiç kısa numara
+        # yoksa da genel bir tutarlılık kontrolü yine yapılmış olur).
+        kisalar = [k for k in bulunanlar if len(k["cekirdek"]) <= 2]
+        digerleri = [k for k in bulunanlar if len(k["cekirdek"]) > 2]
+        ornekler = (kisalar + digerleri)[:5]
+
+        conn = veritabani_baglantisi(DB_FILE)
+        cursor = conn.cursor()
+        eksikler = []
+        for kayit in ornekler:
+            cursor.execute(
+                "SELECT 1 FROM dosyalar WHERE dosya_no_norm = ? AND yil IS ? "
+                "AND ana_kategori = ? AND alt_kategori = ?",
+                (kayit["cekirdek"], kayit["yil"], ana_kategori, alt_kategori),
+            )
+            if cursor.fetchone() is None:
+                eksikler.append(kayit["ham_metin"])
+        conn.close()
+
+        if eksikler:
+            from bildirim import admin_kritik_uyari
+            admin_kritik_uyari(
+                f"⚠️ TUTARLILIK HATASI: '{dosya_adi}' ({ana_kategori}/{alt_kategori}) "
+                f"dosyasından çıkarılan {len(eksikler)} numara, aktarımdan hemen sonra "
+                f"veritabanında sorgulanamadı: {', '.join(eksikler)}. Bu, kullanıcıların "
+                f"gerçekte veritabanında OLAN bir numarayı 'bulunamadı' olarak görebileceği "
+                f"anlamına gelir -- acil incelenmeli."
+            )
+    except Exception as e:
+        print(f"✗ Tutarlılık doğrulaması başarısız (aktarımı etkilemez): {str(e)[:100]}")
 
 
 def klasordeki_tum_pdfleri_ice_aktar():

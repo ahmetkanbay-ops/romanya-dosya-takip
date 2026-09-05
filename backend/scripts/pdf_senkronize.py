@@ -24,6 +24,7 @@ sunucunun NOBETCI_ANAHTARI'si (yereldeki NOBETCI_ANAHTARI'den BİLİNÇLİ
 olarak farklı, proje kuralı gereği yerel/canlı sırlar ayrı tutuluyor).
 """
 import os
+import re
 import sys
 import time
 from datetime import datetime
@@ -43,6 +44,28 @@ except ImportError:
 from dosya_utils import klasor_adi_guvenli  # noqa: E402
 
 SUNUCU_ADRESI = "https://romanya-dosya-takip.onrender.com"
+
+
+def _guncel_yil_dosyasi_mi(ana_kategori, dosya_adi):
+    """2026-09-06 KÖK NEDEN DÜZELTMESİ (kullanıcı canlı testte YİNE
+    yakaladı -- bu sefer bot.py'de DEĞİL, bu scriptte): bot.py'deki AYNI
+    isimli fonksiyonun (2026-08-31) burada hiç karşılığı yoktu. Site,
+    içinde bulunulan yıla ait bazı STADIU PDF'lerini AYNI dosya adında
+    YERİNDE güncelliyor (dosya büyüyor, adı değişmiyor) -- bu script
+    "zaten var, atla" dediği için (satır ~97), yerel kopya production'da
+    çoktan düzeltilmiş/büyümüş olsa bile SONSUZA KADAR eski/eksik
+    kalıyordu. Kanıt: "Art-10-2026-update-07.08.2026.pdf" yerelde 102'den
+    başlıyordu (production'da 3'ten başlıyor) -- tam olarak bot.py'deki
+    31 Ağustos notundaki senaryonun kendisi, sadece bu script o düzeltmeyi
+    hiç almamıştı. ORDINE dosyaları (tek seferlik kararname, adında yayın
+    tarihi var, yıl kategorisi değil) bu kapsamda DEĞİL -- onlar için
+    eskisi gibi "zaten var, atla" davranışı korunuyor."""
+    if ana_kategori != "stadiu":
+        return False
+    eslesme = re.search(r"\b(20\d{2})\b", dosya_adi)
+    if not eslesme:
+        return False
+    return eslesme.group(1) == str(datetime.now().year)
 NOBETCI_ANAHTARI = os.environ.get("PROD_NOBETCI_ANAHTARI")
 PDF_KOK_KLASOR = os.path.join(BASE_DIR, "pdfs")
 LOG_DOSYASI = os.path.join(BASE_DIR, "pdf_senkron_log.txt")
@@ -57,12 +80,24 @@ def _log(satir):
         pass  # log yazılamasa bile senkronizasyonu durdurmaz
 
 
+def _bildir_basarisiz(neden):
+    """Senkronizasyon HİÇ BAŞLAYAMADAN durduğunda da (ör. anahtar eksik,
+    sunucuya ulaşılamıyor) admin'e haber verir -- 'çözemese de bildirmeli'
+    ilkesi (bkz. calistir() sonundaki bildirim notu)."""
+    try:
+        from bildirim import admin_kritik_uyari
+        admin_kritik_uyari(f"📦 Haftalık PDF senkronu BAŞLAYAMADI: {neden}")
+    except Exception as e:
+        _log(f"✗ Bildirim gönderilemedi (senkronu etkilemez): {str(e)[:100]}")
+
+
 def calistir():
     _log(f"\n{'='*60}")
     _log(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] PDF senkronizasyonu başladı")
 
     if not NOBETCI_ANAHTARI:
         _log("✗ PROD_NOBETCI_ANAHTARI .env'de tanımlı değil, durduruluyor.")
+        _bildir_basarisiz("PROD_NOBETCI_ANAHTARI .env'de tanımlı değil.")
         return
 
     try:
@@ -76,6 +111,7 @@ def calistir():
         pdfler = yanit.json()["pdfler"]
     except Exception as e:
         _log(f"✗ PDF listesi alınamadı: {str(e)[:150]}")
+        _bildir_basarisiz(f"PDF listesi alınamadı: {str(e)[:150]}")
         return
 
     _log(f"Sunucuda toplam {len(pdfler)} PDF kayıtlı.")
@@ -94,7 +130,7 @@ def calistir():
         hedef_klasor = os.path.join(PDF_KOK_KLASOR, ana_kategori, alt_klasor)
         hedef_yol = os.path.join(hedef_klasor, dosya_adi)
 
-        if os.path.isfile(hedef_yol):
+        if os.path.isfile(hedef_yol) and not _guncel_yil_dosyasi_mi(ana_kategori, dosya_adi):
             atlanan += 1
             continue
 
@@ -122,6 +158,28 @@ def calistir():
     _log(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] TAMAMLANDI: "
          f"{indirilen} yeni indirildi, {atlanan} zaten vardı, {hatali} hatalı.")
     _log(f"{'='*60}")
+
+    # 2026-09-06 EKLENTİSİ (kullanıcı isteği -- "sistem sadece bulduğumuz
+    # hataya değil, kendi sağlığına odaklanmalı, bize haber vermeli"):
+    # önceden bu özet SADECE yerel bir log dosyasına yazılıyordu, kimse
+    # okumuyordu. Artık Gece Nöbeti'yle AYNI kanaldan (Telegram+e-posta)
+    # size de gidiyor -- haftalık senkronun sessizce mi geçtiğini, yoksa
+    # hata mı verdiğini görmek için log dosyası aramanıza gerek kalmıyor.
+    try:
+        from bildirim import admin_kritik_uyari
+        if hatali > 0:
+            admin_kritik_uyari(
+                f"📦 Haftalık PDF senkronu TAMAMLANDI ama {hatali} dosya "
+                f"indirilemedi ({indirilen} yeni indirildi, {atlanan} zaten "
+                f"vardı) -- log dosyasını (pdf_senkron_log.txt) kontrol et."
+            )
+        else:
+            admin_kritik_uyari(
+                f"📦 Haftalık PDF senkronu tamamlandı: {indirilen} yeni PDF "
+                f"indirildi, {atlanan} zaten günceldi, hata yok."
+            )
+    except Exception as e:
+        _log(f"✗ Bildirim gönderilemedi (senkronu etkilemez): {str(e)[:100]}")
 
 
 if __name__ == "__main__":
