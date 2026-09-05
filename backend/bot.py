@@ -133,10 +133,17 @@ def _guncel_yil_dosyasi_mi(dosya_adi):
     onlarca eski Ordine dosyası gereksiz yere yeniden indirilmeye
     başlamıştı (siteye gereksiz yük -- tam da önlemeye çalıştığımız şey).
     """
-    eslesme = re.search(r"\b(20\d{2})\b", dosya_adi)
-    if not eslesme:
+    # 2026-09-06 EK DÜZELTMESİ (kullanıcı canlı testte YİNE yakaladı): bazı
+    # dosya adlarında BİRDEN FAZLA "20XX" deseni var (ör. "Art-11-2018-
+    # update-07.08.2026.pdf" -- "2018" kategori/arşiv yılı, "2026" asıl
+    # güncelleme tarihi). Eskiden re.search İLK eşleşmeyi ("2018") alıp bu
+    # dosyayı yanlışlıkla "eski/kapanmış" sayıyordu -- oysa asıl önemli olan
+    # GÜNCELLEME tarihindeki yıl. Artık TÜM "20XX" desenleri kontrol edilip
+    # İÇİNDE BULUNULAN YILA eşit olan herhangi biri varsa "aktif" sayılıyor.
+    yillar = re.findall(r"\b(20\d{2})\b", dosya_adi)
+    if not yillar:
         return False
-    return eslesme.group(1) == str(datetime.now(ROMANYA_SAAT_DILIMI).year)
+    return str(datetime.now(ROMANYA_SAAT_DILIMI).year) in yillar
 
 # TEŞHİS MODU (2026-08-15 eklendi): bazı alt kategoriler (CONSULAT / ANC,
 # REZULTATE/INVITATII INTERVIU ART. 8 ve 8.1) sayfada hiç bulunamıyor --

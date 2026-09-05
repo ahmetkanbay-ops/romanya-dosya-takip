@@ -62,10 +62,14 @@ def _guncel_yil_dosyasi_mi(ana_kategori, dosya_adi):
     eskisi gibi "zaten var, atla" davranışı korunuyor."""
     if ana_kategori != "stadiu":
         return False
-    eslesme = re.search(r"\b(20\d{2})\b", dosya_adi)
-    if not eslesme:
+    # 2026-09-06 EK DÜZELTMESİ: bot.py'deki aynı isimli notla birebir aynı
+    # sebep -- "Art-11-2018-update-07.08.2026.pdf" gibi adlarda BİRDEN
+    # FAZLA "20XX" deseni var, İLK eşleşme ("2018") yerine TÜMÜ kontrol
+    # edilmeli.
+    yillar = re.findall(r"\b(20\d{2})\b", dosya_adi)
+    if not yillar:
         return False
-    return eslesme.group(1) == str(datetime.now().year)
+    return str(datetime.now().year) in yillar
 NOBETCI_ANAHTARI = os.environ.get("PROD_NOBETCI_ANAHTARI")
 PDF_KOK_KLASOR = os.path.join(BASE_DIR, "pdfs")
 LOG_DOSYASI = os.path.join(BASE_DIR, "pdf_senkron_log.txt")
