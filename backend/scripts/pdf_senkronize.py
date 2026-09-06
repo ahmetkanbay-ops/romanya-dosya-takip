@@ -166,7 +166,7 @@ def calistir():
     # 2026-09-06 EKLENTİSİ (kullanıcı isteği -- "sistem sadece bulduğumuz
     # hataya değil, kendi sağlığına odaklanmalı, bize haber vermeli"):
     # önceden bu özet SADECE yerel bir log dosyasına yazılıyordu, kimse
-    # okumuyordu. Artık Gece Nöbeti'yle AYNI kanaldan (Telegram+e-posta)
+    # okumuyordu. Artık Gözcü'yle AYNI kanaldan (Telegram+e-posta)
     # size de gidiyor -- haftalık senkronun sessizce mi geçtiğini, yoksa
     # hata mı verdiğini görmek için log dosyası aramanıza gerek kalmıyor.
     try:

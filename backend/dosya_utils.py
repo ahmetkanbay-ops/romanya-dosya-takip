@@ -673,7 +673,7 @@ def tabloyu_hazirla(conn):
         "ON dosyalar(ana_kategori, alt_kategori, pdf_dosya)"
     )
 
-    # 2026-08-30 EKLENTİSİ (Gece Nöbeti -- Faz 1): admin panelinin (PWA)
+    # 2026-08-30 EKLENTİSİ (Gözcü -- Faz 1): admin panelinin (PWA)
     # tarayıcı-native Web Push aboneliklerini tutar. push_tokenlari
     # tablosuyla KARIŞTIRMAMALI -- o, mobil uygulamanın Expo push
     # token'ları için (kullanıcılara "favori onaylandı" bildirimi), bu ise

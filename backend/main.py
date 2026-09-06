@@ -713,7 +713,7 @@ async def lifespan(_app: FastAPI):
     # eklenen bir PDF'i görüp uygulamada bulamazsa "uygulama geride kalıyor/
     # dandik" izlenimi oluşabilir, bu riski azaltmak öncelikli görüldü.
     # 5x/gün'e göre (banın gerçekleştiği sıklık) hâlâ çok daha ölçülü.
-    # BİLİNÇLİ RİSK: ilk birkaç hafta Gece Nöbeti'nin "Günlük Tarama"
+    # BİLİNÇLİ RİSK: ilk birkaç hafta Gözcü'nün "Günlük Tarama"
     # durumu YAKINDAN izlenmeli -- WAF/erişim sorunu belirtisi görülürse
     # (bkz. [[tarama-sikligi-2x-izleme]] hafıza notu) hemen 1x/gün'e
     # geri dönülecek.
@@ -1161,7 +1161,7 @@ def admin_push_test_gonder(_giris=Depends(admin_girisini_dogrula)):
         return {"gonderildi": 0, "silindi": 0, "basarisiz": 0, "detay": "Kayitli abonelik yok."}
 
     veri = json.dumps({
-        "baslik": "🔦 Gece Nöbeti — test bildirimi",
+        "baslik": "🔦 Gözcü — test bildirimi",
         "govde": "Bu bildirimi görüyorsanız Web Push altyapısı çalışıyor.",
         "etiket": "nobetci-test",
         "url": "/admin",
@@ -1322,7 +1322,7 @@ def admin_nobetci_kontrol_et(_yetki=Depends(nobetci_anahtarini_dogrula)):
             for ad, eski, yeni, mesaj in degisenler
         ]
         from bildirim import admin_kritik_uyari
-        admin_kritik_uyari("🔦 Gece Nöbeti -- durum değişikliği:\n\n" + "\n\n".join(satirlar))
+        admin_kritik_uyari("🔦 Gözcü -- durum değişikliği:\n\n" + "\n\n".join(satirlar))
 
     return {"kontrol_edilen": len(durumlar), "degisen": len(degisenler)}
 

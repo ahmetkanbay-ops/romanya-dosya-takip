@@ -1,4 +1,4 @@
-# Gece Nöbeti -- Faz 2 (2026-08-30)
+# Gözcü -- Faz 2 (2026-08-30, 2026-09-06'da "Gece Nöbeti"nden yeniden adlandırıldı)
 #
 # 7/24 izleme "gözcü" katmanı: hiçbir Claude/Render kaynağı kullanmadan,
 # GitHub'ın kendi ücretsiz zamanlayıcısıyla 2 saatte bir backend'in
@@ -16,7 +16,7 @@
 # altında bir repo secret olarak tanımlı olmalı (bkz. AGENTS.md'deki
 # admin_girisini_dogrula'dan AYRI, makineler-arası anahtar deseni).
 
-name: Gece Nöbeti
+name: Gözcü
 
 on:
   schedule:

@@ -64,7 +64,7 @@ Ayrıca SADECE pazar günü, mevcut taramalardan birine eklenti olarak
 silinip silinmediğini/boyutunun değiştiğini HEAD isteğiyle kontrol eder.
 Bundan DAHA SIK polling/retry EKLEME. 5x/gün (2 saatte bir) yapıldığında
 site IP'yi bloke etmişti (2026-08-15) -- 2x/gün hâlâ ölçülü ama İLK
-BİRKAÇ HAFTA Gece Nöbeti'nin "Günlük Tarama" durumu yakından izlenmeli;
+BİRKAÇ HAFTA Gözcü'nün "Günlük Tarama" durumu yakından izlenmeli;
 WAF/erişim sorunu belirtisi görülürse hemen 1x/gün'e (main.py
 `lifespan()` içindeki `scheduler.add_job` çağrılarından birini kaldır)
 geri dönülmeli.
