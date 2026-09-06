@@ -151,6 +151,15 @@ export default function FavorilerimEkrani() {
       >
         <Text style={styles.baslik}>⭐ {t.sekmeFavorilerim}</Text>
         <Text style={styles.aciklama}>{t.favorilerimAciklama}</Text>
+        {/* 2026-09-06 EKLENTİSİ (kullanıcı geri bildirimi): bu ekran zaten
+            her açıldığında /api/favorilerim'den CANLI veri çekiyordu (bkz.
+            useFocusEffect), ama kullanıcının bunu bilmesini sağlayacak
+            hiçbir görsel ipucu yoktu -- "tıklayınca bir şey olmuyor" hissi
+            kullanıcıda "acaba bu güncel mi, tekrar sorgulamam mı lazım"
+            şüphesi yaratıyordu. Belirgin bir rozetle açıkça belirtiliyor. */}
+        <View style={styles.otomatikNotu}>
+          <Text style={styles.otomatikNotuMetin}>{t.favorilerimOtomatikNotu}</Text>
+        </View>
 
         {yukleniyor && (
           <View style={styles.ortaKutu}>
@@ -198,6 +207,21 @@ export default function FavorilerimEkrani() {
                       <Text style={styles.eslesenNo}>Eşleşen numara: {s.dosya_no}</Text>
                     ) : null}
                     <Text style={styles.sonucMesaji}>{sonucMetniGetir(s, t)}</Text>
+                    {/* 2026-09-05 düzeltmesi: bu buton veri olarak zaten
+                        geliyordu (s.yerel_pdf_url) ama arayüzde hiç
+                        gösterilmiyordu -- ana ekrandaki (index.tsx) sonuç
+                        kartıyla aynı davranış burada da olsun diye eklendi. */}
+                    {tip !== 'bulunamadi' && s.yerel_pdf_url ? (
+                      <>
+                        <TouchableOpacity
+                          style={styles.yerelPdfButon}
+                          onPress={() => Linking.openURL(s.yerel_pdf_url!)}
+                        >
+                          <Text style={styles.yerelPdfMetin}>{t.yerelBelgeButon}</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.yerelPdfAciklama}>{t.yerelBelgeAciklama}</Text>
+                      </>
+                    ) : null}
                     {tip !== 'bulunamadi' && s.resmi_pdf_url ? (
                       <TouchableOpacity onPress={() => Linking.openURL(s.resmi_pdf_url!)}>
                         <Text style={styles.linkMetin}>{t.resmiBelgeButon}</Text>
@@ -220,7 +244,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: ZEMIN },
   scrollContent: { padding: 20, paddingTop: 24 },
   baslik: { fontSize: 22, fontWeight: 'bold', color: BEYAZ, marginBottom: 4 },
-  aciklama: { fontSize: 13, color: GRI, marginBottom: 18, lineHeight: 19 },
+  aciklama: { fontSize: 13, color: GRI, marginBottom: 10, lineHeight: 19 },
+  otomatikNotu: {
+    backgroundColor: '#17301F', borderLeftWidth: 3, borderLeftColor: YESIL_INDIR,
+    borderRadius: 8, paddingVertical: 9, paddingHorizontal: 12, marginBottom: 18,
+  },
+  otomatikNotuMetin: { fontSize: 12.5, color: '#8FD9AE', fontWeight: '700', lineHeight: 18 },
   ortaKutu: { alignItems: 'center', paddingVertical: 40, gap: 8 },
   bosBaslik: { fontSize: 16, fontWeight: '700', color: BEYAZ, marginBottom: 4 },
   durumMetni: { fontSize: 13, color: GRI, textAlign: 'center', paddingHorizontal: 20 },
@@ -237,5 +266,11 @@ const styles = StyleSheet.create({
   rozetMetin: { fontSize: 11, fontWeight: '800' },
   eslesenNo: { fontSize: 12, fontWeight: '700', color: ALTIN, marginBottom: 4 },
   sonucMesaji: { fontSize: 13.5, color: BEYAZ, lineHeight: 19 },
+  yerelPdfButon: {
+    marginTop: 12, backgroundColor: YESIL_INDIR, paddingVertical: 10,
+    paddingHorizontal: 14, borderRadius: 10, alignSelf: 'flex-start',
+  },
+  yerelPdfMetin: { fontSize: 13, color: '#fff', fontWeight: '700' },
+  yerelPdfAciklama: { fontSize: 11, color: GRI, marginTop: 6, lineHeight: 15 },
   linkMetin: { fontSize: 12.5, color: ALTIN, fontWeight: '600', textDecorationLine: 'underline', marginTop: 6 },
 });
