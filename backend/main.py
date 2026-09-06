@@ -23,6 +23,7 @@ import hmac
 import json
 import re
 import secrets
+import uuid
 import sqlite3
 import time
 import requests
@@ -266,6 +267,23 @@ elif SENTRY_DSN and not _RENDER_ORTAMI:
 # interaktif Swagger arayuzune gercek bir ihtiyac yok -- kapatildi.
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
+# GEÇİCİ (2026-09-06, tek seferlik yük testi -- kullanıcı onaylı, test
+# bitince BU BLOK TAMAMEN SİLİNECEK): normal trafik/varsayımsal bir
+# saldırgan İÇİN HİÇBİR ŞEY DEĞİŞMİYOR -- IP bazlı sınırlama aynen
+# duruyor. SADECE bu gizli anahtarı taşıyan istekler (yalnızca bizim
+# test scriptimiz bilir) her seferinde BENZERSİZ bir "kova" alıyor, yani
+# hiçbir zaman dolmuyor. Bu yüzden gerçek bir güvenlik zayıflaması
+# OLUŞMUYOR -- önceki (default_limits'i genel olarak gevşetme) yaklaşımı
+# kullanıcının haklı itirazı üzerine bu daha güvenli yönteme değiştirildi.
+_YUK_TESTI_ANAHTARI = "d3ce69f82a410de22921fe53cda79bf246dfaacd250fdd1f"
+
+
+def _sinirlama_anahtari_getir(request: Request) -> str:
+    if request.headers.get("X-Yuk-Testi-Anahtari") == _YUK_TESTI_ANAHTARI:
+        return f"yuktest-{uuid.uuid4()}"
+    return get_remote_address(request)
+
+
 if _SLOWAPI_VAR:
     # Kullanıcının istediği "korsan/kötüye kullanıma karşı üst düzey koruma"
     # kapsamında: TÜM uç noktalara varsayılan olarak dakikada 60 istek
@@ -276,7 +294,7 @@ if _SLOWAPI_VAR:
     # tüm dosya numaralarını sırayla deneyip veritabanını "taramaya"
     # (enumeration) çalışan bir botu global limitten çok daha erken
     # yavaşlatmak.
-    limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+    limiter = Limiter(key_func=_sinirlama_anahtari_getir, default_limits=["60/minute"])
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.add_middleware(SlowAPIMiddleware)
