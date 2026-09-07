@@ -101,6 +101,61 @@ def _render_durumu_getir():
         return {"ikon": "🖥️", "ad": "Render (sunucu)", "durum": "hata", "mesaj": f"Kontrol edilemedi: {e}"}
 
 
+def _bellek_olayi_kontrol_et():
+    """2026-09-07 EKLENTİSİ (kullanıcı isteği -- Render'ın "bellek sınırı
+    aşıldı, otomatik yeniden başlatıldı" e-postasını KENDİ görüp bize
+    haber vermesi yerine, Gözcü'nün bunu KENDİSİ tespit edip anında
+    Telegram'dan haber vermesi için): canlı kanıt -- 07.09.2026 08:04
+    UTC'de tam olarak böyle bir olay yaşandı (günlük tarama, 2020'den
+    beri biriken binlerce eski Ordine dosyasını "zaten işli" diye
+    tararken 512Mi bellek sınırını aştı), Render'ın kendi olay
+    kaydında (/v1/services/{id}/events) 'type: server_failed,
+    reason.oomKilled' olarak GERÇEKTEN sorgulanabildiği doğrulandı.
+
+    Son N saat içinde böyle bir olay varsa "uyari" döner -- bu, mevcut
+    "sadece durum DEĞİŞTİYSE bildir" mekanizmasıyla (nobetci-kontrol-et)
+    doğal olarak çalışır: yeni bir olay olunca iyi->uyari (bildirim
+    gider), pencere dolunca uyari->iyi (sessiz "toparlandı" kaydı),
+    yeni bir olay tekrar olunca iyi->uyari (yine bildirim gider) --
+    yani TEKRARLARSA her seferinde ayrı haber verir, spam yapmaz.
+    Kontrol aralığı (Gözcü cron'u 2 saatte bir çalışıyor, bkz.
+    .github/workflows/gece-nobeti.yml) + tampon pay olarak 3 saatlik
+    pencere seçildi."""
+    if not (RENDER_API_ANAHTARI and RENDER_SERVIS_ID):
+        return {"ikon": "🧠", "ad": "Render (bellek)", "durum": "yok", "mesaj": "API anahtarı ayarlı değil"}
+    try:
+        yanit = requests.get(
+            f"https://api.render.com/v1/services/{RENDER_SERVIS_ID}/events",
+            headers={"Authorization": f"Bearer {RENDER_API_ANAHTARI}"},
+            params={"limit": 20},
+            timeout=_AG_ZAMAN_ASIMI_SN,
+        )
+        yanit.raise_for_status()
+        esik = datetime.now(_UTC) - timedelta(hours=3)
+        for kayit in yanit.json():
+            olay = kayit.get("event", {})
+            if olay.get("type") != "server_failed":
+                continue
+            if not olay.get("details", {}).get("reason", {}).get("oomKilled"):
+                continue
+            zaman_str = olay.get("timestamp", "")
+            try:
+                zaman = datetime.fromisoformat(zaman_str.replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if zaman > esik:
+                limit = olay["details"]["reason"]["oomKilled"].get("memoryLimit", "?")
+                yerel_zaman = zaman.astimezone(ROMANYA_SAAT_DILIMI).strftime("%H:%M")
+                return {
+                    "ikon": "🧠", "ad": "Render (bellek)",
+                    "durum": "uyari",
+                    "mesaj": f"Bellek sınırı ({limit}) aşıldı, {yerel_zaman}'te otomatik yeniden başlatıldı -- veri kaybı yok, taranamayan PDF'ler bir sonraki taramada otomatik tamamlanır.",
+                }
+        return {"ikon": "🧠", "ad": "Render (bellek)", "durum": "iyi", "mesaj": "Son 3 saatte bellek sınırı aşımı yok"}
+    except Exception as e:
+        return {"ikon": "🧠", "ad": "Render (bellek)", "durum": "hata", "mesaj": f"Kontrol edilemedi: {e}"}
+
+
 def _sentry_durumu_getir():
     if not (SENTRY_AUTH_TOKEN and SENTRY_ORG_SLUG and SENTRY_PROJECT_SLUG):
         return {"ikon": "🐞", "ad": "Sentry (hatalar)", "durum": "yok", "mesaj": "API anahtarı ayarlı değil"}
@@ -198,17 +253,18 @@ def _bot_taramasi_durumu(son_basarili_tarama, son_tarama_detay):
 
 
 def bugunun_durumunu_getir(son_basarili_tarama, son_tarama_detay):
-    """4 dış servisi PARALEL sorgulayıp + bot'un kendi tarama durumunu
-    birlikte tek bir liste olarak döndürür. 5 dakika önbelleğe alınır."""
+    """5 dış servis kontrolünü PARALEL sorgulayıp + bot'un kendi tarama
+    durumunu birlikte tek bir liste olarak döndürür. 5 dakika önbelleğe
+    alınır. (2026-09-07: Render bellek/OOM kontrolü eklendi.)"""
     onbellek = _dis_servis_onbellek
     if onbellek["veri"] is not None and (time.time() - onbellek["zaman"]) < _DIS_SERVIS_ONBELLEK_SURESI_SN:
         return onbellek["veri"]
 
     bot_durumu = _bot_taramasi_durumu(son_basarili_tarama, son_tarama_detay)
-    with ThreadPoolExecutor(max_workers=4) as havuz:
+    with ThreadPoolExecutor(max_workers=5) as havuz:
         sonuclar = list(havuz.map(
             lambda fn: fn(),
-            [_render_durumu_getir, _sentry_durumu_getir, _b2_durumu_getir, _github_durumu_getir],
+            [_render_durumu_getir, _bellek_olayi_kontrol_et, _sentry_durumu_getir, _b2_durumu_getir, _github_durumu_getir],
         ))
 
     sonuc = [bot_durumu] + sonuclar
