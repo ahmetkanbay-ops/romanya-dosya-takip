@@ -1,5 +1,6 @@
 import os
 import shutil
+import subprocess
 import sys
 
 # 2026-08-17 (canlı hata düzeltmesi): Windows'ta konsol/çıktı kod sayfası
@@ -432,17 +433,58 @@ def run_bot(yeniden_deneme_mi=False):
     yeniden_deneme_mi parametresi geriye dönük uyumluluk için duruyor
     (artık hiçbir yerden True ile çağrılmıyor, yeniden deneme
     zamanlanmıyor) -- ileride tekrar istenirse buraya eklenebilir.
+
+    2026-09-10 KÖK NEDEN DÜZELTMESİ (Render events API'siyle kanıtlandı --
+    9-10 Eylül'de art arda "oomKilled" ile otomatik yeniden başlatma):
+    bot.py ARTIK BU SÜRECİN İÇİNDE (in-process) DEĞİL, AYRI BİR ALT SÜREÇTE
+    (subprocess) ÇALIŞIYOR. Sebep: Chromium + Playwright'ın kullandığı
+    bellek (~300MB+), FastAPI'nin kendi taban kullanımıyla (~90MB) AYNI
+    512Mi sınırını paylaşıyordu -- ama asıl sorun sadece "toplamı aşmak"
+    değildi: Python'un bellek ayırıcısı (allocator), Chromium/Playwright
+    nesneleri serbest bırakıldıktan SONRA bile o belleği işletim sistemine
+    geri VERMİYOR (bilinen bir CPython davranışı) -- yani her taramadan
+    sonra sürecin taban bellek kullanımı bir miktar YÜKSEK kalıyor, gün
+    içinde tekrar tekrar taramalar biriktikçe (11:00 + 15:00, üstelik
+    manuel API trafiğiyle de üst üste binerek) marj git gide eriyor, ta ki
+    bir tarama sınırı aşana kadar (tam da bunun kanıtı: OOM sonrası anlık
+    yeniden başlatmadan sonra AYNI GÜN 15:00 taraması sorunsuz tamamlandı --
+    çünkü restart belleği sıfırladı). subprocess.run() ile bot.py'yi TAMAMEN
+    AYRI bir OS sürecinde çalıştırmak, alt süreç bittiğinde onun kullandığı
+    TÜM belleğin (Python allocator'ın elinde tutup tutmadığına bakılmaksızın)
+    işletim sistemi tarafından geri alınmasını garantiler -- FastAPI'nin
+    kendi süreci hiç büyümez, taban kullanım her taramadan sonra sıfırlanır.
     """
     try:
-        from bot import botu_calistir
         print(f"\n{'='*60}")
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] BOT OTOMATİK ÇALIŞTIRILDI")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] BOT OTOMATİK ÇALIŞTIRILDI (ayrı süreçte)")
         print(f"{'='*60}")
-        toplam_pdf_bulunan = botu_calistir()
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] BOT TAMAMLANDI")
+        sonuc = subprocess.run(
+            [sys.executable, "bot.py"],
+            cwd=BASE_DIR,
+            env=os.environ.copy(),
+            timeout=1800,  # 30 dk -- normal bir tarama birkaç dakika sürer, bolca güvenlik payı
+            capture_output=True,
+            text=True,
+        )
+        # Alt sürecin print() çıktısı Render loglarında hiç kesinti olmadan
+        # görünmeye devam etsin diye burada olduğu gibi tekrar basılıyor.
+        if sonuc.stdout:
+            print(sonuc.stdout, end="")
+        if sonuc.stderr:
+            print(sonuc.stderr, end="")
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] BOT TAMAMLANDI (çıkış kodu: {sonuc.returncode})")
 
-        if not toplam_pdf_bulunan:
-            print("  ℹ Site erişilemedi ya da hiç yeni PDF bulunamadı -- bir sonraki deneme bugün/yarın 11:00 ya da 15:00'te.")
+        if sonuc.returncode != 0:
+            print("  ! Bot alt süreci hata koduyla sonlandı.")
+            from bildirim import admin_kritik_uyari  # lazy import, bkz. veritabani_yedekle() notu
+            admin_kritik_uyari(
+                f"Bot alt süreci hata koduyla bitti (çıkış kodu: {sonuc.returncode}) -- "
+                f"Render loglarına bakılmalı."
+            )
+    except subprocess.TimeoutExpired:
+        print("✗ Bot alt süreci zaman aşımına uğradı (30 dk), sonlandırıldı.")
+        from bildirim import admin_kritik_uyari
+        admin_kritik_uyari("Bot alt süreci 30 dakika içinde bitmedi, zorla sonlandırıldı -- site yanıt vermiyor olabilir.")
     except Exception as e:
         print(f"✗ Bot çalıştırma hatası: {e}")
 
