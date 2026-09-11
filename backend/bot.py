@@ -140,10 +140,37 @@ def _guncel_yil_dosyasi_mi(dosya_adi):
     # dosyayı yanlışlıkla "eski/kapanmış" sayıyordu -- oysa asıl önemli olan
     # GÜNCELLEME tarihindeki yıl. Artık TÜM "20XX" desenleri kontrol edilip
     # İÇİNDE BULUNULAN YILA eşit olan herhangi biri varsa "aktif" sayılıyor.
+    #
+    # 2026-09-11 KÖK NEDEN DÜZELTMESİ #2 (Render loglarıyla kanıtlandı --
+    # 6/7/8/10/11 Eylül'de HER GÜN "12 PDF indirme denemesi başarısız oldu"
+    # uyarısı, hep aynı 12 dosya: Art-11-2015..2026-update-*.pdf, yani
+    # ARTICOLUL 11'in TÜM 12 yıllık arşivi): yukarıdaki 09-06 düzeltmesi
+    # kendisi bir kök neden içeriyordu -- "dosya adında GEÇEN HERHANGİ bir
+    # 20XX cari yıla eşitse aktif say" mantığı, site TÜM arşiv dosyalarını
+    # (2015'ten 2026'ya, hiçbiri değişmemiş olsa bile) AYNI GÜNDE yeniden
+    # kaydedip "-update-09.09.2026-" damgası basınca, o güncelleme
+    # tarihinin YILI (2026) her dosyada eşleştiği için 11 KAPANMIŞ yılın
+    # arşivini de "aktif/her gün yeniden indir" sayıyordu. Sonuç: her
+    # taramada gereksiz yere 12 büyük PDF art arda indirilmeye
+    # çalışılıyordu -- bu "bot gibi" davranış siteye WAF/bağlantı reddi
+    # (ECONNREFUSED) tetikletiyor gibi görünüyor.
+    #
+    # Doğru ayrım: "-YYYY-update-" kalıbındaki YYYY, "-update-" kelimesinin
+    # HEMEN ÖNÜNDEKİ yıl -- bu asıl İÇERİK/ARŞİV yılı ("Art-11-2018-
+    # update-..." -> içerik 2018'e ait). "-update-" SONRASINDAKİ tarih ise
+    # sadece sitenin dosyayı en son ne zaman yeniden kaydettiği -- içerik
+    # değişmemiş olsa bile bu tarih güncellenebiliyor, bu yüzden yıl
+    # kararına HİÇ karıştırılmamalı. Bu kalıp yoksa (başka bir dosya adı
+    # deseni), eski/güvenli tarafta kalan davranışa (herhangi bir 20XX
+    # cari yıla eşitse aktif say) dönülüyor.
+    icerik_yili_eslesme = re.search(r"-(\d{4})-update-", dosya_adi)
+    cari_yil = str(datetime.now(ROMANYA_SAAT_DILIMI).year)
+    if icerik_yili_eslesme:
+        return icerik_yili_eslesme.group(1) == cari_yil
     yillar = re.findall(r"\b(20\d{2})\b", dosya_adi)
     if not yillar:
         return False
-    return str(datetime.now(ROMANYA_SAAT_DILIMI).year) in yillar
+    return cari_yil in yillar
 
 # TEŞHİS MODU (2026-08-15 eklendi): bazı alt kategoriler (CONSULAT / ANC,
 # REZULTATE/INVITATII INTERVIU ART. 8 ve 8.1) sayfada hiç bulunamıyor --

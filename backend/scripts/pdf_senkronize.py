@@ -66,10 +66,21 @@ def _guncel_yil_dosyasi_mi(ana_kategori, dosya_adi):
     # sebep -- "Art-11-2018-update-07.08.2026.pdf" gibi adlarda BİRDEN
     # FAZLA "20XX" deseni var, İLK eşleşme ("2018") yerine TÜMÜ kontrol
     # edilmeli.
+    #
+    # 2026-09-11 EK DÜZELTMESİ: bot.py'deki aynı isimli notla (bkz. o
+    # dosyadaki "KÖK NEDEN DÜZELTMESİ #2") birebir aynı sebep -- yukarıdaki
+    # mantık, "-update-" SONRASINDAKİ (sitenin dosyayı en son ne zaman
+    # kaydettiği) tarihin yılını da saydığı için, hiç değişmemiş eski yıl
+    # arşivlerini bile "aktif" sanıyordu. Asıl içerik yılı "-update-"
+    # kelimesinin HEMEN ÖNÜNDEKİ yıl -- o kalıp varsa öncelikli kullanılıyor.
+    icerik_yili_eslesme = re.search(r"-(\d{4})-update-", dosya_adi)
+    cari_yil = str(datetime.now().year)
+    if icerik_yili_eslesme:
+        return icerik_yili_eslesme.group(1) == cari_yil
     yillar = re.findall(r"\b(20\d{2})\b", dosya_adi)
     if not yillar:
         return False
-    return str(datetime.now().year) in yillar
+    return cari_yil in yillar
 NOBETCI_ANAHTARI = os.environ.get("PROD_NOBETCI_ANAHTARI")
 PDF_KOK_KLASOR = os.path.join(BASE_DIR, "pdfs")
 LOG_DOSYASI = os.path.join(BASE_DIR, "pdf_senkron_log.txt")
