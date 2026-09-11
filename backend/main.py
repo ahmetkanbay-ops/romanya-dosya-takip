@@ -1318,6 +1318,79 @@ def admin_saglik_kontrolu(_yetki=Depends(nobetci_anahtarini_dogrula)):
     }
 
 
+_GECERLI_OLAY_TIPLERI = {"kritik_uyari", "tarama_tamamlandi", "push_gonderildi"}
+
+
+@app.get("/api/admin/olay-gunlugu")
+def admin_olay_gunlugu(
+    tip: Optional[str] = None,
+    saat: int = 24,
+    limit: int = 50,
+    _yetki=Depends(nobetci_anahtarini_dogrula),
+):
+    """2026-09-12 EKLENTİSİ (kullanıcı isteği): Claude'un, admin panelindeki
+    hata/işlem bildirimlerini (şu ana kadar SADECE Telegram+e-posta ile
+    gidiyordu, kullanıcı bunları ekran görüntüsü alıp yapıştırıyordu)
+    KENDİSİNİN doğrudan okuyabilmesi için salt-okunur bir görünüm.
+
+    Veri, ZATEN VAR OLAN `sistem_olaylari` tablosundan geliyor --
+    admin_kritik_uyari/tarama_tamamlandi/push_gonderildi olaylarının HER
+    BİRİ bildirim.py'deki `_olay_kaydet_sessizce` ile zaten buraya
+    yazılıyordu (bkz. dosya_utils.py "sistem_olaylari" tablo tanımı), bu
+    uç sadece o veriye YENİ bir okuma kapısı açıyor. Telegram/e-posta
+    gönderimine HİÇ dokunulmadı, ikisi de aynen çalışmaya devam ediyor.
+
+    NOBETCI_ANAHTARI ile korunuyor (admin oturum çerezi DEĞİL) -- Gözcü'nün
+    diğer makineler-arası uçlarıyla (saglik-kontrolu, pdf-listesi) aynı
+    desen, çünkü bu da bir tarayıcı oturumu olmadan (curl/script ile)
+    çağrılıyor.
+
+    Sorgu parametreleri (hepsi opsiyonel):
+    - tip: 'kritik_uyari' | 'tarama_tamamlandi' | 'push_gonderildi'
+      (verilmezse hepsi döner)
+    - saat: son kaç saat içindeki olaylar (varsayılan 24)
+    - limit: en fazla kaç kayıt (varsayılan 50, üst sınır 500)
+    """
+    if tip is not None and tip not in _GECERLI_OLAY_TIPLERI:
+        raise HTTPException(status_code=400, detail=f"Geçersiz tip -- geçerli değerler: {sorted(_GECERLI_OLAY_TIPLERI)}")
+    limit = max(1, min(limit, 500))
+    saat = max(1, min(saat, 24 * 30))  # en fazla 30 gün geriye
+
+    esik_utc = (datetime.now(timezone.utc) - timedelta(hours=saat)).strftime("%Y-%m-%d %H:%M:%S")
+    sorgu = "SELECT olay_tipi, detay, zaman FROM sistem_olaylari WHERE zaman >= ?"
+    parametreler = [esik_utc]
+    if tip is not None:
+        sorgu += " AND olay_tipi = ?"
+        parametreler.append(tip)
+    sorgu += " ORDER BY zaman DESC LIMIT ?"
+    parametreler.append(limit)
+
+    conn = veritabani_baglantisi(DB_FILE, row_factory=sqlite3.Row)
+    try:
+        satirlar = conn.execute(sorgu, parametreler).fetchall()
+    finally:
+        conn.close()
+
+    olaylar = []
+    for s in satirlar:
+        # sistem_olaylari.zaman SQLite'ın CURRENT_TIMESTAMP'ı -- UTC, saat
+        # dilimsiz metin (bkz. admin_panel.py _olay_satirlari_html'deki
+        # aynı çevrim). Okunurluk için Romanya yerel saati de ekleniyor.
+        try:
+            ayristirilan = datetime.fromisoformat(s["zaman"]).replace(tzinfo=timezone.utc)
+            zaman_yerel = ayristirilan.astimezone(ROMANYA_SAAT_DILIMI).strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            zaman_yerel = s["zaman"]
+        olaylar.append({
+            "tip": s["olay_tipi"],
+            "detay": s["detay"],
+            "zaman_utc": s["zaman"],
+            "zaman_yerel": zaman_yerel,
+        })
+
+    return {"toplam": len(olaylar), "olaylar": olaylar}
+
+
 _NOBETCI_DURUM_IKONU = {"iyi": "✅", "uyari": "🚨", "hata": "🚨", "yok": "ℹ️"}
 
 
