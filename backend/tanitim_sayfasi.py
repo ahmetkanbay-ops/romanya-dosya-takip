@@ -23,9 +23,18 @@ alındıktan SONRA buraya taşındı.
 """
 import html as _html_modul
 
-PLAY_STORE_URL = None  # Uygulama yayınlanınca gerçek Play Store linki buraya girilecek.
+PLAY_STORE_URL = None  # Uygulama YAYINLANINCA (üretim onayı gelince) gerçek Play Store linki buraya girilecek.
 
-_UYGULAMA_FIYATI = None  # Play Console'da fiyat belirlenince buraya (ör. "₺49,99") girilecek.
+# 2026-09-13: Google'a "Üretime başvur" gönderildi (inceleme genellikle
+# ~7 gün sürüyor) -- ama henüz ONAYLANMADI, yani PLAY_STORE_URL hâlâ
+# None olmalı (erken "şimdi Play Store'de" demek yanlış/erken olurdu).
+# Bu bayrak SADECE metni "kapalı test" yerine "inceleme sürecinde" yapmak
+# için -- Google onaylayıp PLAY_STORE_URL gerçek bir linkle doldurulunca
+# bu bayrağın artık hiçbir etkisi kalmaz (üstteki if PLAY_STORE_URL dalı
+# devreye girer). Onay geldiğinde: PLAY_STORE_URL'i gerçek linkle doldur.
+_URETIME_BASVURULDU = True
+
+_UYGULAMA_FIYATI = "₺721,00"  # Play Console'da (Türkiye) belirlenen gerçek fiyat.
 
 # 2026-09-12: emoji ikonografi yerine tutarlı, tek-stil çizgi ikonlar
 # (elle yazılmış, basit SVG -- harici bir ikon kütüphanesi/CDN'e gerek
@@ -126,6 +135,13 @@ def tanitim_sayfasi_html(toplam_stadiu=None, toplam_onay=None, toplam_bekleyen=N
             f'<a class="btn-primary" href="{PLAY_STORE_URL}">'
             f'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m5 3 14 9-14 9V3Z"/></svg>'
             f' Play Store\'dan İndir</a>'
+        )
+    elif _URETIME_BASVURULDU:
+        eyebrow_html = '<span class="dot"></span>İnceleme sürecinde — çok yakında Play Store\'de'
+        magaza_html = (
+            '<span class="btn-primary btn-disabled" aria-disabled="true">'
+            '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>'
+            ' Çok Yakında Play Store\'de</span>'
         )
     else:
         eyebrow_html = '<span class="dot"></span>Kapalı test aşamasında — yakında herkese açık'
