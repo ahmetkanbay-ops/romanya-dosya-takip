@@ -75,6 +75,8 @@ from dosya_utils import (
     guvenli_commit,
     ROMANYA_SAAT_DILIMI,
     sira_tahmini_hesapla,
+    ziyaretci_sayisini_oku,
+    yeni_ziyaretci_kaydet,
 )
 from hukuki_metinler import (
     KULLANIM_SARTLARI_METIN,
@@ -180,6 +182,14 @@ ADMIN_OTURUM_GECERLILIK_SN = 90 * 24 * 60 * 60  # 90 gün
 # /admin tekrar /admin/giris'e atiyor ("sayfaya etki etmiyor" hissi buradan
 # geliyordu). Bu yuzden secure bayragini ortama gore ayarliyoruz.
 ADMIN_OTURUM_COOKIE_SECURE = os.environ.get("RENDER") is not None
+
+# 2026-09-12 EKLENTİSİ (tanıtım sayfası -- "kaç kişi ziyaret etmiş" sayacı,
+# kullanıcı isteği): kimliksiz, IP/kişisel veri İÇERMEYEN bir işaretçi
+# çerez -- SADECE "bu tarayıcı buraya daha önce geldi mi" bilgisini taşır,
+# JS'ten erişilmesine gerek yok (httponly). secure bayrağı admin oturum
+# çerezindeki AYNI desen (Render'da HTTPS var, yerel LAN'da düz HTTP).
+ZIYARETCI_COOKIE_ADI = "ziyaret_edildi"
+ZIYARETCI_COOKIE_GECERLILIK_SN = 10 * 365 * 24 * 60 * 60  # ~10 yıl, fiilen kalıcı
 
 
 def _admin_oturum_imzala(son_gecerlilik_ts: int) -> str:
@@ -338,7 +348,17 @@ async def guvenlik_basliklari_ekle(request: Request, call_next):
     # bu SADECE CSS'e izin verir, script enjeksiyonuna karşı asıl koruma
     # (script-src/default-src 'self') aynen korunuyor.
     yanit.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    yanit.headers["Content-Security-Policy"] = "default-src 'self'; style-src 'self' 'unsafe-inline'"
+    # 2026-09-12 EKLENTİSİ (tanıtım sayfası redesign'ı): Google Fonts
+    # KULLANILIYOR (Fraunces/Public Sans/IBM Plex Mono) -- stil sayfası
+    # fonts.googleapis.com'dan, gerçek font dosyaları fonts.gstatic.com'dan
+    # geliyor. İkisi de sadece CSS/font dosyası servis ediyor, script
+    # ÇALIŞTIRAMAZLAR -- script-src/default-src 'self' korumasına hiç
+    # dokunulmadı, sadece bu iki dar/gerekçeli istisna eklendi.
+    yanit.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com"
+    )
     return yanit
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -829,7 +849,7 @@ class SorguIstegi(BaseModel):
 
 
 @app.get("/", response_class=HTMLResponse)
-def root():
+def root(request: Request):
     """
     2026-08-20 (kullanıcı isteği): önceden burada sadece boş bir sağlık
     kontrolü JSON'u vardı, hiçbir işe yaramıyordu. Artık gerçek bir tanıtım
@@ -848,6 +868,14 @@ def root():
     ana_kategori+yil kapsayan idx_dosya_ana_norm_yil indeksi sayesinde)
     pahasına, rakamlar artık sunucu yeniden başlasa bile ilk ziyaretçide
     dolduruluyor.
+
+    2026-09-12 EKLENTİSİ (kullanıcı isteği -- "kaç kişi ziyaret etmiş"
+    sayacı): IP/kişisel veri KULLANMIYOR. Tarayıcıda ZIYARETCI_COOKIE_ADI
+    çerezi yoksa bu "ilk kez gelen" bir tarayıcı demektir -- sayaç bir
+    artırılır ve çerez bırakılır; çerez zaten varsa sayaç aynı kalır,
+    sadece güncel toplam okunur. Aynı kişi farklı tarayıcı/cihazdan
+    gelirse ayrı sayılır -- bu, IP takibi yapmamanın kabul edilen küçük
+    bir maliyeti (bkz. kullanıcıyla konuşulan tasarım kararı).
     """
     simdi = time.time()
     onbellek = _genel_istatistik_onbellek
@@ -855,13 +883,38 @@ def root():
         onbellek["veri"] = _genel_istatistikleri_hesapla()
         onbellek["zaman"] = simdi
     veri = onbellek["veri"]
+
+    conn = veritabani_baglantisi(DB_FILE)
+    try:
+        yeni_ziyaretci_mi = request.cookies.get(ZIYARETCI_COOKIE_ADI) != "1"
+        if yeni_ziyaretci_mi:
+            toplam_ziyaretci = yeni_ziyaretci_kaydet(conn)
+        else:
+            toplam_ziyaretci = ziyaretci_sayisini_oku(conn)
+    finally:
+        conn.close()
+
     if veri:
-        return tanitim_sayfasi_html(
+        icerik = tanitim_sayfasi_html(
             toplam_stadiu=veri["toplam_stadiu"],
             toplam_onay=veri["toplam_onaylanan"],
             toplam_bekleyen=veri["toplam_bekleyen"],
+            toplam_ziyaretci=toplam_ziyaretci,
         )
-    return tanitim_sayfasi_html()
+    else:
+        icerik = tanitim_sayfasi_html(toplam_ziyaretci=toplam_ziyaretci)
+
+    yanit = HTMLResponse(content=icerik)
+    if yeni_ziyaretci_mi:
+        yanit.set_cookie(
+            key=ZIYARETCI_COOKIE_ADI,
+            value="1",
+            max_age=ZIYARETCI_COOKIE_GECERLILIK_SN,
+            httponly=True,
+            samesite="lax",
+            secure=ADMIN_OTURUM_COOKIE_SECURE,
+        )
+    return yanit
 
 
 # 2026-08-23 EKLENTİSİ: Kullanıcı Google'da site adını aratınca hiç

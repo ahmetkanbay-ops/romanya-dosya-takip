@@ -451,6 +451,24 @@ def pdf_zaten_islenmis_mi(conn, ana_kategori, alt_kategori, pdf_dosya):
     return cur.fetchone() is not None
 
 
+def ziyaretci_sayisini_oku(conn):
+    """2026-09-12: site_ziyaretleri tablosundaki güncel toplamı döner --
+    tablo tabloyu_hazirla() ile garanti oluşturulmuş/tek satırlı olduğu
+    için satır bulunamama ihtimaline karşı yine de 0'a düşülüyor."""
+    satir = conn.execute("SELECT toplam FROM site_ziyaretleri WHERE id = 1").fetchone()
+    return satir[0] if satir else 0
+
+
+def yeni_ziyaretci_kaydet(conn):
+    """2026-09-12: main.py'deki '/' ucu, tarayıcısında ziyaretçi çerezi
+    OLMAYAN bir istek gördüğünde çağırır -- sayaç bir artar, GÜNCEL
+    toplam döner. IP/kişisel veri hiç görmüyor/saklamıyor, sadece
+    'bir tarayıcı daha ilk kez geldi' bilgisini sayıyor."""
+    conn.execute("UPDATE site_ziyaretleri SET toplam = toplam + 1 WHERE id = 1")
+    guvenli_commit(conn)
+    return ziyaretci_sayisini_oku(conn)
+
+
 def guvenli_commit(conn, deneme=4):
     """conn.commit()'i, geçici 'database is locked' / 'disk I/O error'
     durumlarında artan bekleme süreleriyle birkaç kez yeniden dener.
@@ -756,6 +774,21 @@ def tabloyu_hazirla(conn):
         )
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_tarama_yeni_kayit_zaman ON tarama_yeni_kayitlar(tarama_zamani)")
+
+    # 2026-09-12 EKLENTİSİ (kullanıcı isteği -- tanıtım sayfası redesign'ı
+    # sırasında): "kaç kişi ziyaret etmiş" sayacı. IP/kişisel veri
+    # KULLANMIYOR -- main.py'deki / ucu, tarayıcıya kimliksiz bir çerez
+    # bırakıp "bu tarayıcı daha önce sayıldı mı" diye bakıyor, sadece ilk
+    # kez gelen (çerezi olmayan) bir tarayıcıda bu sayaç +1 artıyor. Tek
+    # satırlık basit bir toplam sayaç -- id=1 CHECK kısıtıyla ikinci bir
+    # satır asla eklenemez.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS site_ziyaretleri (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            toplam INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    cursor.execute("INSERT OR IGNORE INTO site_ziyaretleri (id, toplam) VALUES (1, 0)")
 
     conn.commit()
 
