@@ -23,6 +23,13 @@ alındıktan SONRA buraya taşındı.
 """
 import html as _html_modul
 
+# 2026-09-13 (kullanıcı fark etti -- redesign'daki JS düzeltmesi 24 saatlik
+# /statik önbelleği (main.py _OnbellekliStatikDosyalar) yüzünden bazı
+# ziyaretçilerde geç yansıyordu): tanitim.js'e her gerçek içerik
+# değişikliğinde bu sürüm numarasını elle artır -- URL değiştiği için
+# tarayıcı eski önbelleklenmiş kopyayı DEĞİL, her zaman güncel dosyayı ister.
+_TANITIM_JS_SURUMU = 5
+
 PLAY_STORE_URL = None  # Uygulama YAYINLANINCA (üretim onayı gelince) gerçek Play Store linki buraya girilecek.
 
 # 2026-09-13: Google'a "Üretime başvur" gönderildi (inceleme genellikle
@@ -554,6 +561,6 @@ footer{{border-top:1px solid var(--line-soft); padding:28px 0 46px; text-align:c
   <div class="foot-sig">🔒 Secured &amp; Encrypted System · By @knby · © 2026</div>
 </footer>
 
-<script src="/statik/landing/tanitim.js" defer data-captions='[{phone_captions_js}]'></script>
+<script src="/statik/landing/tanitim.js?v={_TANITIM_JS_SURUMU}" defer data-captions='[{phone_captions_js}]'></script>
 </body>
 </html>"""

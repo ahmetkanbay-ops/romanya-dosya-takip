@@ -88,6 +88,7 @@
       dotsEl.appendChild(dot);
     });
     var frames = scroller.querySelectorAll(".phone-frame");
+    var currentIndex = 0;
     function updateActiveFrame() {
       var center = scroller.scrollLeft + scroller.clientWidth / 2;
       var closest = 0;
@@ -100,18 +101,49 @@
           closest = i;
         }
       });
+      currentIndex = closest;
       if (captions[closest]) captionEl.textContent = captions[closest];
       Array.from(dotsEl.children).forEach(function (dot, i) {
         dot.className = i === closest ? "on" : "";
       });
     }
-    scroller.addEventListener(
-      "scroll",
-      function () {
-        window.requestAnimationFrame(updateActiveFrame);
-      },
-      { passive: true }
-    );
+    // NOT: requestAnimationFrame ile erteleme burada BİLEREK kullanılmıyor
+    // -- rAF, sekme arka planda/odakta değilken (ör. bazı otomasyon
+    // bağlamlarında) hiç tetiklenmeyebiliyor, canlı testte bunu yakaladık.
+    // updateActiveFrame zaten ucuz/salt-okunur bir hesaplama, doğrudan
+    // çağırmak yeterince performanslı.
+    scroller.addEventListener("scroll", updateActiveFrame, { passive: true });
+
+    // 2026-09-13 EKLENTİSİ (kullanıcı fark etti -- eski tasarımda ekran
+    // görüntüleri OTOMATİK dönüyordu, saf CSS animasyonuyla; bu redesign
+    // manuel kaydırmaya geçerken otomatik oynatmayı unutmuştu, masaüstü
+    // ziyaretçiler için "hareketsiz/bozuk" görünüyordu). Aynı eski
+    // ritimle (3.4sn/görsel) otomatik ilerliyor; kullanıcı elle
+    // kaydırırsa updateActiveFrame zaten currentIndex'i günceller, bir
+    // sonraki otomatik adım kaldığı yerden devam eder (eski konuma
+    // sıçramaz). prefers-reduced-motion'da otomatik oynatma kapalı.
+    var prefersReducedMotion =
+      window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (frames.length > 1 && !prefersReducedMotion) {
+      // NOT: Element.scrollTo({behavior:'smooth'}) bazı otomasyon/arka
+      // plan sekmesi bağlamlarında (compositor'a bağlı) hiç animasyon
+      // üretmeyip sessizce hiçbir şey yapmıyor -- bunu canlı testte
+      // yakaladık. Güvenilirlik için düz scrollLeft ataması kullanılıyor
+      // (anlık geçiş) -- kullanıcının kendi elle kaydırması hâlâ
+      // tarayıcının doğal/akıcı davranışıyla çalışıyor, bu sadece
+      // OTOMATİK ilerlemeyi etkiliyor.
+      setInterval(function () {
+        var nextIndex = (currentIndex + 1) % frames.length;
+        var frame = frames[nextIndex];
+        var hedef = frame.offsetLeft - (scroller.clientWidth - frame.offsetWidth) / 2;
+        scroller.scrollLeft = hedef;
+        // 'scroll' olayının dispatch'i tarayıcıda asenkron/boyamaya bağlı
+        // olabiliyor -- alt yazı/nokta senkronunu 'scroll' olayının
+        // ateşlenmesine bel bağlamadan GARANTİYE almak için burada da
+        // doğrudan çağrılıyor (ucuz bir işlem, çift çağrılması sorun değil).
+        updateActiveFrame();
+      }, 3400);
+    }
   }
 
   // ---- SSS akordeon ----
