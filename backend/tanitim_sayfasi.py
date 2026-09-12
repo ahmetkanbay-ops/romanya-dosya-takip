@@ -41,7 +41,7 @@ PLAY_STORE_URL = None  # Uygulama YAYINLANINCA (üretim onayı gelince) gerçek 
 # devreye girer). Onay geldiğinde: PLAY_STORE_URL'i gerçek linkle doldur.
 _URETIME_BASVURULDU = True
 
-_UYGULAMA_FIYATI = "₺721,00"  # Play Console'da (Türkiye) belirlenen gerçek fiyat.
+_UYGULAMA_FIYATI = "₺750,00"  # Play Console'da (Türkiye) belirlenen gerçek fiyat.
 
 # 2026-09-12: emoji ikonografi yerine tutarlı, tek-stil çizgi ikonlar
 # (elle yazılmış, basit SVG -- harici bir ikon kütüphanesi/CDN'e gerek
