@@ -727,6 +727,19 @@ def _derin_taramayi_calistir(context):
                 # Diğer durum kodları (503 WAF vb.) kesin bir sinyal değil,
                 # tek bir HEAD isteğiyle yanlış alarm üretmemek için atlanır.
                 continue
+            # 2026-09-13 KÖK NEDEN DÜZELTMESİ (kullanıcı fark etti -- her
+            # Pazar ~90+ "boyut değişmiş" yanlış alarmı, hepsinin kaynak
+            # boyutu BİREBİR AYNI ~33KB): WAF, HEAD isteklerini GET'ten
+            # farklı ele alıyor -- gerçek PDF'i döndürmek yerine kendi
+            # HTML "doğrulama" sayfasını 503 DEĞİL, 200 ile dönüyor. Eski
+            # kod "200 geldi, güvenilir" varsayıp bu HTML sayfasının
+            # boyutunu gerçek PDF boyutuyla karşılaştırıyordu -- elmayla
+            # armut kıyaslaması, hep "değişmiş" çıkıyordu. content-type
+            # gerçekten PDF değilse (WAF'ın HTML sayfası döndüğünün kesin
+            # kanıtı) bu dosya da diğer belirsiz durumlar gibi atlanıyor.
+            icerik_tipi = (yanit.headers.get("content-type") or "").lower()
+            if "pdf" not in icerik_tipi:
+                continue
             uzunluk_str = yanit.headers.get("content-length")
             if uzunluk_str:
                 yerel_yol = os.path.join(
