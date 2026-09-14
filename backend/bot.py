@@ -693,10 +693,19 @@ def _derin_taramayi_calistir(context):
 
     kontrol_conn = veritabani_baglantisi(DB_FILE, row_factory=sqlite3.Row)
     try:
+        # 2026-09-14 KÖK NEDEN DÜZELTMESİ (kullanıcı fark etti -- content-type
+        # filtresine rağmen Pazar'da hâlâ ~90 "boyut değişmiş" yanlış alarmı,
+        # hepsi "kaynakta: 33338 bayt"): sebep WAF DEĞİLMİŞ -- aktar.py'nin
+        # gerçek kaynak URL'i bulamadığında (.pdf.url eşlik dosyası yoksa)
+        # düştüğü yedek değer (site ANA SAYFASI) yüzünden. Yüzbinlerce eski
+        # kayıt bu placeholder'ı taşıyor (bkz. aktar.py _kaynak_url_oku).
+        # Ana sayfaya HEAD atıp dönen boyutu bir PDF'in boyutuyla kıyaslamak
+        # baştan anlamsız -- WAF'ın content-type'ı ne dönerse dönsün bu satır
+        # hiç kontrol edilmemeli, o yüzden sorgudan baştan hariç tutuluyor.
         satirlar = kontrol_conn.execute(
             "SELECT DISTINCT pdf_dosya, pdf_kaynak_url, ana_kategori, alt_kategori "
             "FROM dosyalar WHERE yil IN (?, ?) AND pdf_kaynak_url IS NOT NULL "
-            "AND pdf_dosya IS NOT NULL",
+            "AND pdf_dosya IS NOT NULL AND pdf_kaynak_url != 'https://cetatenie.just.ro/'",
             kapsam_yillari,
         ).fetchall()
     finally:
