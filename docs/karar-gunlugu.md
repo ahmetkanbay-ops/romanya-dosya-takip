@@ -155,8 +155,8 @@ planını yükselt" önerilmişti, kullanıcı haklı olarak reddetti, gerçek
 
 | Görev | Sıklık | Nerede | Not |
 |---|---|---|---|
-| Site taraması (`run_bot`) | Günde 2x: 11:00 + 18:45 (Romanya saati), Cumartesi hariç | Render, APScheduler (`main.py` `lifespan()`) | 2026-09-02'de 1x'ten 2x'e çıkarıldı (kullanıcı kararı) — bkz. [[tarama-sikligi-2x-izleme]]. 2026-09-15'te saat/gün veriye dayalı güncellendi: 235 gerçek PDF'in sunucu Last-Modified zamanı analiz edildi, Cumartesi/Pazar hiç yükleme yok (0/235), en geç yükleme 18:18 — bkz. [[pdf-web-yukleme-zamani-ozelligi]]. Daha önce günde 5x (2 saatte bir) denenmiş, site IP'yi bloke etmişti (2026-08-15) — bir daha SIKLAŞTIRILMAMALI |
-| Haftalık derin tarama | Sadece Pazar, mevcut taramalardan birine eklenti | Render, aynı scheduler | PDF'lerin silinip silinmediğini/boyut değiştiğini HEAD isteğiyle kontrol eder, sıklığı ARTIRMAZ |
+| Site taraması (`run_bot`) | Hafta içi (Pzt-Cuma) günde 2x: 11:00 + 18:45; Pazar SADECE 18:45'te tek çalışma; Cumartesi hiç yok (Romanya saati) | Render, APScheduler (`main.py` `lifespan()`) | 2026-09-02'de 1x'ten 2x'e çıkarıldı (kullanıcı kararı) — bkz. [[tarama-sikligi-2x-izleme]]. 2026-09-15'te saat/gün veriye dayalı güncellendi: 235 gerçek PDF'in sunucu Last-Modified zamanı analiz edildi, Cumartesi/Pazar hiç yükleme yok (0/235), en geç yükleme 18:18 — bkz. [[pdf-web-yukleme-zamani-ozelligi]]. Pazar'ın tek çalıştırması sadece haftalık derin tarama içindir (yeni PDF keşfi için gerekmiyor). Daha önce günde 5x (2 saatte bir) denenmiş, site IP'yi bloke etmişti (2026-08-15) — bir daha SIKLAŞTIRILMAMALI |
+| Haftalık derin tarama | Sadece Pazar 18:45'teki tek taramanın sonuna eklenti | Render, aynı scheduler | PDF'lerin silinip silinmediğini/boyut değiştiğini HEAD isteğiyle kontrol eder, sıklığı ARTIRMAZ |
 | Veritabanı yedeği (yerel) | Her gece 03:00 | Render, APScheduler | `sqlite3` online backup API'si (WAL-güvenli), 2 gün saklanıyor (önceden 7 gündü, disk %80 dolunca düşürüldü) |
 | Bulut yedeği (B2) | Aynı akışta, 03:00 sonrası | Render → Backblaze B2 | 30 gün saklanıyor, sadece DB |
 | Disk kotası kontrolü | Her gün 06:00 | Render, APScheduler | |
