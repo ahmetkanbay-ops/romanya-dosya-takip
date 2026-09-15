@@ -60,19 +60,20 @@ Bot hafta içi (Pzt-Cuma) günde 2 kez (11:00 ve 18:45, Romanya saati)
 tarıyor -- 2026-09-02'de kullanıcının bilinçli kararıyla 1x'ten 2x'e
 çıkarıldı (gerekçe: aynı gün eklenen bir PDF'in "1 gün geç" görünmesi
 güven sarsıcı bir izlenim riski taşıyordu).
-2026-09-15'te SAAT ve GÜN kısıtlaması veriye dayalı güncellendi (bkz.
+2026-09-15/16'da SAAT ve GÜN kısıtlaması veriye dayalı güncellendi (bkz.
 hafıza notu pdf-web-yukleme-zamani-ozelligi): 235 gerçek PDF'in sunucu
 Last-Modified zamanı analiz edildi, Cumartesi/Pazar HİÇ yükleme
 olmadığı (0/235) ve en geç yüklemenin 18:18 (Romanya saati) olduğu
 kanıtlandı -- 2. tarama bu yüzden 18:45'e çekildi (mesai bitişine
-güvenli pay), Cumartesi tamamen kaldırıldı. **Pazar ayrı/özel bir
-durum:** hafta içiyle AYNI 2x/gün çalışmıyor -- sadece TEK bir
-çalıştırma var, 18:45'te (11:00'deki iş Pazar'ı hiç içermiyor). Bu
-tek çalıştırmanın amacı yeni PDF keşfi DEĞİL (Pazar yükleme zaten
-sıfır), sadece haftalık "derin tarama"yı tetiklemek (aşağıya bakın).
-SADECE pazar günü, o tek taramanın SONUNA eklenti olarak (sıklığı
-artırmadan) hafif bir "derin tarama" çalışır -- PDF'lerin silinip
-silinmediğini/boyutunun değiştiğini HEAD isteğiyle kontrol eder.
+güvenli pay). **Cumartesi VE Pazar artık TAMAMEN kapalı** -- run_bot
+ikisinde de hiç çalışmıyor (kullanıcının 2026-09-16 net kararı: "hafta
+sonu boş geçsin"). Haftalık "derin tarama" (aşağıya bakın), eskiden
+Pazar'a bağlıyken artık **Cuma'nın SON (18:45) taramasına** taşındı --
+hafta sonu başlamadan hafta içi biriken PDF'lerin bütünlüğünü kontrol
+ediyor. SADECE Cuma günü, SADECE günün son (18:45) taramasının SONUNA
+eklenti olarak (sıklığı artırmadan) hafif bir "derin tarama" çalışır --
+PDF'lerin silinip silinmediğini/boyutunun değiştiğini HEAD isteğiyle
+kontrol eder (bkz. bot.py `_derin_tarama_gunu_mu`).
 Bundan DAHA SIK polling/retry EKLEME. 5x/gün (2 saatte bir) yapıldığında
 site IP'yi bloke etmişti (2026-08-15) -- 2x/gün hâlâ ölçülü ama İLK
 BİRKAÇ HAFTA Gözcü'nün "Günlük Tarama" durumu yakından izlenmeli;

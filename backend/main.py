@@ -798,18 +798,16 @@ async def lifespan(_app: FastAPI):
     # ARTMADI, sadece saat kaydırıldı -- yine de ilk birkaç hafta Gözcü'nün
     # "Günlük Tarama" durumu izlenmeli (bkz. [[tarama-sikligi-2x-izleme]]).
     #
-    # 2026-09-15 GÜNCELLEMESİ #2 (kullanıcı kararı): Pazar hafta içiyle
-    # AYNI ŞEKİLDE günde 2 kez çalışmıyor -- Pazar'ın TEK amacı haftalık
-    # "derin tarama"yı (bkz. bot.py _derin_tarama_gunu_mu -- mevcut
-    # PDF'lerin silinip silinmediğini/boyutunun değiştiğini kontrol eder)
-    # tetiklemek, yeni PDF keşfi değil (veri zaten kanıtladı: Pazar
-    # yükleme sıfır). Bu yüzden Pazar'da SADECE TEK çalıştırma var,
-    # 18:45'te (job2, aşağıda) -- 11:00'deki job1'in gün listesinden Pazar
-    # BİLEREK çıkarıldı. Derin tarama kendi iç kontrolüyle (sistem_olaylari
-    # tablosunda o gün zaten kayıt var mı) çalışır, hangi run_bot
-    # çalıştırmasının içinden tetiklendiği önemli değil -- artık Pazar'da
-    # zaten tek çalıştırma olduğu için bu kontrol sadece "aynı gün içinde
-    # iki kez tetiklenmesin" ihtimaline karşı bir güvenlik payı.
+    # 2026-09-16 GÜNCELLEMESİ (kullanıcı kararı, SON hâl): Cumartesi VE
+    # Pazar artık TAMAMEN boş -- run_bot İKİSİNDE de hiç çalışmıyor.
+    # (2026-09-15'te önce sadece Cumartesi kaldırılıp Pazar'a tek bir
+    # 18:45 çalıştırması bırakılmıştı çünkü haftalık "derin tarama" ona
+    # bağımlıydı -- kullanıcı bir gün sonra "Pazar da tamamen boş kalsın"
+    # diye kararını netleştirdi.) Derin tarama artık bot.py
+    # _derin_tarama_gunu_mu içinde CUMA gününün SON (18:45) taramasına
+    # taşındı -- hafta sonu başlamadan, hafta içi biriken PDF'lerin
+    # bütünlüğünü kontrol ediyor. Bu yüzden her iki job de sadece
+    # 'mon-fri' -- Cumartesi/Pazar hiçbir job'da yok.
     scheduler.add_job(
         run_bot,
         'cron',
@@ -822,11 +820,11 @@ async def lifespan(_app: FastAPI):
     scheduler.add_job(
         run_bot,
         'cron',
-        day_of_week='mon-fri,sun',
+        day_of_week='mon-fri',
         hour='18',
         minute='45',
         id='pdf_downloader_2',
-        name='PDF Downloader Bot (2. tarama)'
+        name='PDF Downloader Bot (2. tarama, Cuma\'da derin tarama tetikleyicisi)'
     )
     # 2026-08-17: otomatik veritabanı yedeği, taramalardan ÖNCE (03:00'te,
     # gece en sakin saat) alınıyor -- bkz. veritabani_yedekle().
@@ -850,7 +848,7 @@ async def lifespan(_app: FastAPI):
     )
     scheduler.start()
     print(f"\n✓ Scheduler başlatıldı!")
-    print(f"✓ Bot: Hafta ici (Pzt-Cuma) 11:00 ve 18:45'te; Pazar SADECE 18:45'te (tek calisma, derin tarama icin) calisacak -- Cumartesi tamamen kapali")
+    print(f"✓ Bot: SADECE hafta ici (Pzt-Cuma) 11:00 ve 18:45'te calisacak -- Cumartesi/Pazar tamamen kapali, derin tarama Cuma'nin son (18:45) taramasina eklendi")
     print(f"✓ Yedekleme: Her gün 03:00'te otomatik veritabanı yedeği alınacak (son {YEDEK_SAKLAMA_GUN_SAYISI} gün saklanır)")
     print(f"✓ Sonraki çalışma: Zamanı gelince otomatik çalışır\n")
 

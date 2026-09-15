@@ -64,10 +64,11 @@ Global hesap listesi (bu projeye özel olmayanlar dahil) `~/.claude/CLAUDE.md`'d
 - **Cari yılın dosyası (`stadiu` için) her taramada yeniden indiriliyor**
   — çünkü site aynı dosya adını YERİNDE güncelliyor (`ordine` buna dahil
   değil, tek seferlik kararname).
-- **Tarama sıklığı: hafta içi günde 2 (11:00 + 18:45 Romanya saati),
-  Cumartesi tamamen kapalı, Pazar SADECE 18:45'te tek çalışma (derin
-  tarama için)** — 2026-09-15'te 235 PDF'in gerçek sunucu yükleme zamanı
-  analiz edilip saat/gün veriye dayalı güncellendi (bkz. karar günlüğü).
+- **Tarama sıklığı: SADECE hafta içi günde 2 (11:00 + 18:45 Romanya
+  saati), Cumartesi/Pazar TAMAMEN kapalı** — haftalık derin tarama
+  Cuma'nın son (18:45) taramasına eklendi. 2026-09-15/16'da 235 PDF'in
+  gerçek sunucu yükleme zamanı analiz edilip saat/gün veriye dayalı
+  güncellendi (bkz. karar günlüğü).
   Sıklık DAHA SIK artırılmamalı, site 5x/gün'de
   bir kez IP'yi bloke etmişti.
 

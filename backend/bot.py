@@ -664,25 +664,35 @@ def _bildirimleri_gonder(tum_yeni_kayitlar, bulunamayan_kategoriler, toplam_pdf_
 
 def _derin_tarama_gunu_mu():
     """
-    Pazar mı (Romanya saatiyle) VE bugün henüz derin tarama denenmedi mi?
-    Python'da Pazartesi=0 ... Pazar=6.
+    Cuma mı (Romanya saatiyle) VE günün SON taraması mı (18:00 sonrası) VE
+    bugün henüz derin tarama denenmedi mi? Python'da Pazartesi=0 ... Cuma=4.
 
-    2026-09-02 EKLENTİSİ (2x/gün'e geçiş sonrası önemli): günlük tarama
-    artık günde İKİ KEZ çalışıyor (11:00 + 15:00) -- eğer bu kontrol
-    sadece "bugün pazar mı" olsaydı, derin tarama pazar günü HER İKİ
-    çalıştırmada da tetiklenir, gereksiz yere iki katı yük/istek üretirdi.
-    Bu yüzden ayrıca sistem_olaylari'nda BUGÜN zaten bir
-    derin_tarama_tamamlandi/derin_tarama_pas_gecildi kaydı var mı
-    kontrol ediliyor -- varsa (ilk çalıştırma zaten denemişse) ikinci
-    çalıştırma sessizce atlar.
+    2026-09-16 GÜNCELLEMESİ (kullanıcı kararı): Cumartesi VE Pazar artık
+    TAMAMEN boş -- bakanlık zaten hafta sonu hiç PDF yayınlamıyor (bkz.
+    hafıza notu pdf-web-yukleme-zamani-ozelligi, 235 PDF'lik canlı analiz).
+    Önceden Pazar'a bağlı olan haftalık derin tarama artık Cuma'nın SON
+    taramasına (18:45) taşındı -- hafta sonu başlamadan önce, hafta içi
+    biriken PDF'lerin bütünlüğünü (silinme/boyut değişimi) kontrol etmiş
+    oluyoruz.
+
+    2026-09-02 EKLENTİSİ (2x/gün'e geçiş sonrası önemli, hâlâ geçerli):
+    günlük tarama Cuma günü de İKİ KEZ çalışıyor (11:00 + 18:45) -- eğer
+    bu kontrol sadece "bugün cuma mı" olsaydı, derin tarama İLK
+    çalıştırmada (11:00) da tetiklenirdi. Bu yüzden ayrıca saat >= 18
+    şartı eklendi (sadece günün SON/akşam taramasında çalışsın) VE
+    sistem_olaylari'nda BUGÜN zaten bir derin_tarama_tamamlandi/
+    derin_tarama_pas_gecildi kaydı var mı kontrol ediliyor -- varsa
+    (aynı akşam taraması bir sebeple ikinci kez tetiklenirse) atlanır.
     """
     simdi = datetime.now(ROMANYA_SAAT_DILIMI)
-    if simdi.weekday() != 6:
+    if simdi.weekday() != 4:
+        return False
+    if simdi.hour < 18:
         return False
     # sistem_olaylari.zaman SQLite CURRENT_TIMESTAMP'i (HER ZAMAN UTC) --
     # "bugün 00:00" Romanya sınırını UTC'ye çevirmeden karşılaştırmak
     # gece yarısına yakın saatlerde yanlış sonuç verebilirdi (bkz. AGENTS.md
-    # saat dilimi notu). Derin tarama pratikte 11:00/15:00 civarı çalıştığı
+    # saat dilimi notu). Derin tarama pratikte 18:45 civarı çalıştığı
     # için bu risk düşük ama yine de doğru yapılıyor.
     bugun_baslangic_yerel = simdi.replace(hour=0, minute=0, second=0, microsecond=0)
     bugun_baslangic_utc = bugun_baslangic_yerel.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
@@ -1168,8 +1178,9 @@ def botu_calistir():
 
             time.sleep(2)
 
-        # 2026-09-02 (kullanıcı isteği): haftalık hafif derin tarama --
-        # SADECE pazar günü, SADECE günlük tarama sitede erişim sorunu
+        # 2026-09-02 (kullanıcı isteği), 2026-09-16'da Cuma akşamına
+        # taşındı: haftalık hafif derin tarama -- SADECE Cuma günü SON
+        # (18:45) taramada, SADECE günlük tarama sitede erişim sorunu
         # yaşamadıysa (aksi halde "o hafta pas geçildi" olarak kaydedilir,
         # sessizce atlanmaz). Ana taramayı ASLA engellememeli, bu yüzden
         # tamamen ayrı bir try/except içinde, browser kapanmadan ÖNCE
