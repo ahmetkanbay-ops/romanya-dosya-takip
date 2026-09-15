@@ -56,9 +56,17 @@ eşik/karşılaştırma yapılan her yerde `ROMANYA_SAAT_DILIMI` (Europe/Buchare
 
 ## cetatenie.just.ro'ya nazik davran
 
-Bot günde 2 kez (11:00 ve 15:00) tarıyor -- 2026-09-02'de kullanıcının
-bilinçli kararıyla 1x'ten 2x'e çıkarıldı (gerekçe: aynı gün eklenen bir
-PDF'in "1 gün geç" görünmesi güven sarsıcı bir izlenim riski taşıyordu).
+Bot günde 2 kez (11:00 ve 18:45, Romanya saati) tarıyor, SADECE Cumartesi
+hariç her gün (mon-fri + pazar) -- 2026-09-02'de kullanıcının bilinçli
+kararıyla 1x'ten 2x'e çıkarıldı (gerekçe: aynı gün eklenen bir PDF'in
+"1 gün geç" görünmesi güven sarsıcı bir izlenim riski taşıyordu).
+2026-09-15'te SAAT ve GÜN kısıtlaması veriye dayalı güncellendi (bkz.
+hafıza notu pdf-web-yukleme-zamani-ozelligi): 235 gerçek PDF'in sunucu
+Last-Modified zamanı analiz edildi, Cumartesi/Pazar HİÇ yükleme
+olmadığı (0/235) ve en geç yüklemenin 18:18 (Romanya saati) olduğu
+kanıtlandı -- 2. tarama bu yüzden 18:45'e çekildi (mesai bitişine
+güvenli pay), Cumartesi tamamen kaldırıldı. Pazar KALDIRILMADI çünkü
+haftalık "derin tarama" ona bağımlı (aşağıya bakın).
 Ayrıca SADECE pazar günü, mevcut taramalardan birine eklenti olarak
 (sıklığı artırmadan) hafif bir "derin tarama" çalışır -- PDF'lerin
 silinip silinmediğini/boyutunun değiştiğini HEAD isteğiyle kontrol eder.

@@ -775,13 +775,43 @@ async def lifespan(_app: FastAPI):
     # eklenen bir PDF'i görüp uygulamada bulamazsa "uygulama geride kalıyor/
     # dandik" izlenimi oluşabilir, bu riski azaltmak öncelikli görüldü.
     # 5x/gün'e göre (banın gerçekleştiği sıklık) hâlâ çok daha ölçülü.
-    # BİLİNÇLİ RİSK: ilk birkaç hafta Gözcü'nün "Günlük Tarama"
-    # durumu YAKINDAN izlenmeli -- WAF/erişim sorunu belirtisi görülürse
-    # (bkz. [[tarama-sikligi-2x-izleme]] hafıza notu) hemen 1x/gün'e
-    # geri dönülecek.
+    #
+    # 2026-09-15 GÜNCELLEMESİ (kullanıcı analizi + veriye dayalı doğrulama):
+    # [[pdf-web-yukleme-zamani-ozelligi]] ile eklenen Last-Modified takibi
+    # sayesinde kullanıcı, sitenin "Data de X" etiketiyle PDF'in GERÇEK
+    # sunucuya yüklenme zamanının farklı olabildiğini (2885P örneği: 3 gün
+    # fark) fark etti. Bunun üzerine Ordine articolul 10+11'deki TÜM 2026
+    # PDF'lerinin (235 dosya) gerçek Last-Modified zamanı canlı taranıp
+    # analiz edildi:
+    #   - Cumartesi/Pazar yükleme: 0/235 -- bakanlık kesin hafta içi çalışıyor.
+    #   - En geç gözlemlenen yükleme: 18:18 (Romanya/Bükreş yerel saati),
+    #     18:00-19:00 arası sadece 3 yükleme, 19:00 sonrası hiç yok.
+    # Buna göre: (1) 2. tarama 15:00'dan 18:45'e taşındı (mesai bitişine
+    # güvenli pay bırakarak) -- amaç, işten eve dönüp sorgulayan kullanıcının
+    # o GÜN eklenen bir PDF'i bir sonraki güne kalmadan görebilmesi.
+    # (2) her iki tarama da SADECE hafta içi (mon-fri) çalışacak şekilde
+    # kısıtlandı -- hafta sonu boşuna site trafiği/WAF riski üretmesin.
+    # Zamanlayıcı 'Europe/Bucharest' saat dilimini kullandığı için (bkz.
+    # scheduler tanımı) yaz/kış saati değişince elle müdahale GEREKMİYOR,
+    # kendini otomatik ayarlıyor.
+    # BİLİNÇLİ RİSK (değişmedi): hâlâ günde 2 kez, sıklık ARTMADI, sadece
+    # saat kaydırıldı -- yine de ilk birkaç hafta Gözcü'nün "Günlük Tarama"
+    # durumu izlenmeli (bkz. [[tarama-sikligi-2x-izleme]]).
+    #
+    # ÖNEMLİ İNCELİK -- gün kısıtlaması neden 'mon-fri' DEĞİL 'mon-fri,sun':
+    # Cumartesi'yi tamamen kaldırıyoruz (veri kanıtladı: sıfır yükleme).
+    # Ama Pazar'ı TAMAMEN kaldırmıyoruz -- haftalık "derin tarama" (bkz.
+    # bot.py _derin_tarama_gunu_mu) BİLEREK sadece Pazar çalışacak şekilde
+    # tasarlanmış (mevcut PDF'lerin silinip silinmediğini/boyutunun
+    # değiştiğini kontrol eder) ve bu, run_bot'un GÜNLÜK tarama akışının
+    # İÇİNDEN tetikleniyor -- run_bot Pazar hiç çalışmazsa derin tarama da
+    # hiç çalışmaz. Pazar'da tek bir çalıştırma (11:00) hem yeterli hem
+    # doğru -- deep scan kendi iç kontrolüyle (o gün zaten yapıldıysa
+    # atlar) 18:45'teki ikinci çalıştırmada tekrar tetiklenmiyor.
     scheduler.add_job(
         run_bot,
         'cron',
+        day_of_week='mon-fri,sun',
         hour='11',
         minute='0',
         id='pdf_downloader_1',
@@ -790,8 +820,9 @@ async def lifespan(_app: FastAPI):
     scheduler.add_job(
         run_bot,
         'cron',
-        hour='15',
-        minute='0',
+        day_of_week='mon-fri,sun',
+        hour='18',
+        minute='45',
         id='pdf_downloader_2',
         name='PDF Downloader Bot (2. tarama)'
     )
@@ -817,7 +848,7 @@ async def lifespan(_app: FastAPI):
     )
     scheduler.start()
     print(f"\n✓ Scheduler başlatıldı!")
-    print(f"✓ Bot: Her gün 11:00 ve 15:00'te çalışacak (2026-09-02 kararı, WAF riski nedeniyle yakından izleniyor)")
+    print(f"✓ Bot: Cumartesi hariç her gün (Pzt-Cuma+Pazar) 11:00 ve 18:45'te çalışacak (2026-09-15: veriye dayalı saat güncellemesi, Pazar deep-scan icin korundu)")
     print(f"✓ Yedekleme: Her gün 03:00'te otomatik veritabanı yedeği alınacak (son {YEDEK_SAKLAMA_GUN_SAYISI} gün saklanır)")
     print(f"✓ Sonraki çalışma: Zamanı gelince otomatik çalışır\n")
 
