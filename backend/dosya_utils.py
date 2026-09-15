@@ -542,6 +542,24 @@ def tabloyu_hazirla(conn):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_dosya_no_norm ON dosyalar(dosya_no_norm)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_dosya_no_tum_rakam ON dosyalar(dosya_no_tum_rakam)")
 
+    # 2026-09-15 EKLENTİSİ (kullanıcı analizi -- 2885P'nin site listesinde
+    # "Data de 11.09.2026" altında gösterilmesine rağmen sunucuya asıl
+    # 14.09.2026'da yüklendiğinin fark edilmesi): PDF'in dosya ADINDAKİ
+    # tarih (ör. "11.09.2026"), ORDİN'in kendi tarihidir -- sitenin gerçekten
+    # NE ZAMAN yayınladığıyla aynı olmak ZORUNDA değil, birkaç gün fark
+    # olabiliyor. cetatenie.just.ro'nun WordPress medya sunucusu her PDF
+    # için gerçek yükleme zamanını 'Last-Modified' HTTP başlığında GÜVENİLİR
+    # şekilde döndürüyor (canlı doğrulandı) -- bot.py artık PDF'i indirirken
+    # bunu da yakalayıp buraya kaydediyor. UTC olarak saklanıyor (SQLite'ın
+    # CURRENT_TIMESTAMP'ıyla aynı kural -- gösterirken ROMANYA_SAAT_DILIMI
+    # ile çevrilmeli). NULL olabilir (eski kayıtlar, ya da site başlığı
+    # döndürmediyse).
+    cursor.execute("PRAGMA table_info(dosyalar)")
+    dosyalar_kolonlari_v2 = {row[1] for row in cursor.fetchall()}
+    if "pdf_web_yuklenme_zamani" not in dosyalar_kolonlari_v2:
+        cursor.execute("ALTER TABLE dosyalar ADD COLUMN pdf_web_yuklenme_zamani TEXT")
+        print("! 'dosyalar' tablosuna 'pdf_web_yuklenme_zamani' kolonu eklendi (mevcut veri korunuyor).")
+
     # --- Bildirim / Favoriler (Faz 1) -------------------------------------
     # 2026-08-17 KRİTİK DÜZELTME: Bu tablo eskiden SADECE expo_push_token
     # tutuyordu, hangi CİHAZA ait olduğunu bilmiyordu. Bu yüzden

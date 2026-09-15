@@ -22,6 +22,7 @@ import re
 import sqlite3
 import time
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 import requests
 from requests.adapters import HTTPAdapter
 try:
@@ -99,6 +100,28 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # backend/ klasöründen okunur/yazılır.
 VERI_DIZINI = os.environ.get("DATA_DIR", BASE_DIR)
 PDF_KOK_KLASOR = os.path.join(VERI_DIZINI, "pdfs")
+
+
+def _web_yuklenme_zamanini_ayikla(basliklar):
+    """
+    2026-09-15 EKLENTİSİ (kullanıcı analizi -- bkz. aktar.py'deki
+    web_yuklenme_zamani parametresinin notu): indirme yanıtının
+    'Last-Modified' başlığını (RFC 2822 biçiminde, ör. "Tue, 15 Sep 2026
+    14:10:31 GMT") UTC "YYYY-MM-DD HH:MM:SS" metnine çevirir -- diğer tüm
+    zaman damgalarıyla (SQLite CURRENT_TIMESTAMP) aynı kural. Başlık yoksa
+    ya da ayrıştırılamazsa None döner, çağıran taraf bunu sorunsuz kabul
+    eder (kolon NULL'a izin veriyor).
+    """
+    ham = basliklar.get("last-modified")
+    if not ham:
+        return None
+    try:
+        zaman = parsedate_to_datetime(ham)
+        if zaman.tzinfo is None:
+            zaman = zaman.replace(tzinfo=timezone.utc)
+        return zaman.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return None
 
 
 def _guncel_yil_dosyasi_mi(dosya_adi):
@@ -534,7 +557,11 @@ def _b_plani_devreye_al(page, tip, alt_kategori, http_oturum, kontrol_conn):
                     f.write(pdf_res.body())
                 with open(hedef_yol + ".url", "w", encoding="utf-8") as f:
                     f.write(href)
-                eklenen, yeni = pdf_verilerini_ice_aktar(hedef_yol, tip, alt_kategori, kaynak_url=href)
+                web_yuklenme_zamani = _web_yuklenme_zamanini_ayikla(pdf_res.headers)
+                eklenen, yeni = pdf_verilerini_ice_aktar(
+                    hedef_yol, tip, alt_kategori, kaynak_url=href,
+                    web_yuklenme_zamani=web_yuklenme_zamani,
+                )
                 kaydedilen_kayit += eklenen
                 yeni_kayitlar.extend(yeni)
                 indirilen_sayisi += 1
@@ -1059,8 +1086,10 @@ def botu_calistir():
                                     with open(hedef_yol + ".url", "w", encoding="utf-8") as f:
                                         f.write(href)
 
+                                    web_yuklenme_zamani = _web_yuklenme_zamanini_ayikla(pdf_res.headers)
                                     eklenen, yeni = pdf_verilerini_ice_aktar(
-                                        hedef_yol, tip, alt_kategori, kaynak_url=href
+                                        hedef_yol, tip, alt_kategori, kaynak_url=href,
+                                        web_yuklenme_zamani=web_yuklenme_zamani,
                                     )
                                     kaydedilen_kayit += eklenen
                                     tum_yeni_kayitlar.extend(yeni)

@@ -58,7 +58,7 @@ def _kaynak_url_oku(pdf_yolu):
     return None
 
 
-def pdf_verilerini_ice_aktar(pdf_yolu, ana_kategori, alt_kategori, kaynak_url=None):
+def pdf_verilerini_ice_aktar(pdf_yolu, ana_kategori, alt_kategori, kaynak_url=None, web_yuklenme_zamani=None):
     """
     Tek bir PDF'i okuyup içindeki dosya numaralarını veritabanına ekler.
 
@@ -69,6 +69,14 @@ def pdf_verilerini_ice_aktar(pdf_yolu, ana_kategori, alt_kategori, kaynak_url=No
                 Görüntüle" butonu için). Verilmezse '<dosya>.pdf.url' eşlik
                 dosyasından okunmaya çalışılır, o da yoksa genel liste
                 sayfasına düşer.
+    web_yuklenme_zamani: 2026-09-15 EKLENTİSİ -- sitenin PDF'i sunucusuna
+                GERÇEKTEN ne zaman yüklediği (HTTP 'Last-Modified' başlığından,
+                UTC, "YYYY-MM-DD HH:MM:SS" biçiminde). PDF'in dosya adındaki/
+                ordinin kendi tarihiyle KARIŞTIRILMAMALI -- ikisi birkaç gün
+                farklı olabiliyor (bkz. hafıza notu
+                derin-tarama-anasayfa-placeholder-kok-neden'in yanındaki
+                ilgili not). bot.py'nin canlı indirmesi dışında (ör. elle
+                aktarım) çağrılırsa genelde bilinmez, None kalır.
 
     Dönen değer: (eklenen_kayit_sayisi, yeni_kayitlar) tuple'ı.
     yeni_kayitlar: bu PDF'te bulunan ve veritabanında DAHA ÖNCE hiç
@@ -130,8 +138,8 @@ def pdf_verilerini_ice_aktar(pdf_yolu, ana_kategori, alt_kategori, kaynak_url=No
             """
             INSERT OR REPLACE INTO dosyalar
             (dosya_no, dosya_no_norm, dosya_no_tum_rakam, yil, ana_kategori, alt_kategori,
-             durum, mesaj, pdf_dosya, pdf_kaynak_url, liste_url, eslesti)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             durum, mesaj, pdf_dosya, pdf_kaynak_url, liste_url, eslesti, pdf_web_yuklenme_zamani)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 ham,
@@ -146,6 +154,7 @@ def pdf_verilerini_ice_aktar(pdf_yolu, ana_kategori, alt_kategori, kaynak_url=No
                 kaynak_url,
                 "https://cetatenie.just.ro/",
                 True,
+                web_yuklenme_zamani,
             ),
         )
         eklenen += 1
