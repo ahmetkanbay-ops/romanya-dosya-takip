@@ -32,19 +32,20 @@ import { DonutGrafik, YillikCubukGrafik, SiraGostergesi } from '@/components/ist
 // Bu ekran deneysel-arama.tsx ile aynı prensiple index.tsx'ten bağımsız
 // yazıldı -- kendi state'i, kendi stilleri var, ana akışa dokunmuyor.
 
-// 2026-08-20 (sıra tahmini düzeltmesi): backend'deki yeni /api/sira-tahmini
+// 2026-08-20 (sıra tahmini düzeltmesi): backend'deki /api/sira-tahmini
 // ucu madde (alt kategori) ayrımı YAPARAK çalışıyor -- eski
 // /api/istatistikler/kisisel tüm maddeleri karıştırıyordu (ör. Articolul
 // 8'deki biri, Articolul 11'deki aynı numaranın onaylanmasıyla yanlışlıkla
-// "onaylanmış" sayılabiliyordu). Sadece "kuyruk" kapsamındaki maddeler
-// listeleniyor -- mülakat/davet listeleri (REZULTATE/INVITATII) bir
-// "bekleme kuyruğu" değil, ayrı bir süreç olduğu için kasıtlı olarak yok
-// (bkz. backend/dosya_utils.py _BEKLEME_KUYRUGU_ALT_KATEGORILERI ile
-// BİREBİR aynı liste, iki taraf da senkron tutulmalı).
-const MADDE_SECENEKLERI = [
-  'ARTICOLUL 11', 'ARTICOLUL 8', 'ARTICOLUL 8″1', 'ARTICOLUL 8″2',
-  'ARTICOLUL 10', 'NR. DOSAR',
-];
+// "onaylanmış" sayılabiliyordu).
+//
+// 2026-09-17 DEĞİŞİKLİĞİ (kullanıcı analizi): artık burada sabit bir
+// "Alt Kategori" listesi YOK -- backend, dosya no + yılı kendisi arayıp
+// hangi kategoride olduğunu %99,3 ihtimalle kendisi tespit ediyor.
+// Sadece nadir (~%0,7) çoklu-eşleşme durumunda backend'in döndürdüğü
+// GERÇEK seçenekler gösteriliyor (aşağıya bkz. kategoriSecenekleri state'i).
+// Mülakat/davet listeleri (REZULTATE/INVITATII) backend tarafından ayrıca
+// "kuyruk_disi" diye işaretleniyor -- bir "bekleme kuyruğu" değiller,
+// sıra hesaplanamıyor ama dosyanın bulunduğu açıkça belirtiliyor.
 
 const LACIVERT = '#1E2C4A';
 const KART_YUZEY = '#27375A';
@@ -59,37 +60,56 @@ export default function IstatistiklerEkrani() {
   const { t } = useDil();
 
   // --- Kişisel yıl istatistiği ---
+  // 2026-09-17 DEĞİŞİKLİĞİ (kullanıcı analizi + veritabanı ölçümü --
+  // %99,3 durumda tek kategori eşleşiyor, bkz. backend/main.py
+  // /api/sira-tahmini notu): artık kullanıcıya baştan sabit 6'lık bir
+  // "Alt Kategori" listesi sunulmuyor. Sistem önce alt_kategori GÖNDERMEDEN
+  // sorguluyor; backend TEK eşleşme varsa direkt sonucu, BİRDEN FAZLA
+  // eşleşme varsa (nadir, ~%0,7) SADECE gerçekten eşleşen kategorileri
+  // "kategoriSecenekleri" olarak döndürüyor -- o zaman kullanıcıya (sabit
+  // liste değil, sadece ilgili 2-3 seçenek) ikinci bir adım gösteriliyor.
   const [dosyaNo, setDosyaNo] = useState('');
   const [yil, setYil] = useState('');
-  const [maddeSecimi, setMaddeSecimi] = useState<string | null>(null);
   const [kisiselYukleniyor, setKisiselYukleniyor] = useState(false);
   const [kisiselHata, setKisiselHata] = useState('');
   const [kisiselSonuc, setKisiselSonuc] = useState<any | null>(null);
+  const [kategoriSecenekleri, setKategoriSecenekleri] = useState<string[] | null>(null);
 
-  const kisiselSorgula = async () => {
+  const kisiselSorgula = async (secilenAltKategori?: string) => {
     if (!dosyaNo.trim() || !yil.trim()) {
       setKisiselHata(t.istatistikKisiselEksikAlan);
-      return;
-    }
-    if (!maddeSecimi) {
-      setKisiselHata(t.istatistikMaddeSeciniz);
       return;
     }
     setKisiselHata('');
     setKisiselYukleniyor(true);
     setKisiselSonuc(null);
+    setKategoriSecenekleri(null);
     try {
+      const istekGovdesi: Record<string, string> = { dosya_no: dosyaNo.trim(), yil: yil.trim() };
+      if (secilenAltKategori) {
+        istekGovdesi.alt_kategori = secilenAltKategori;
+      }
       const response = await apiIstek('/api/sira-tahmini', {
         method: 'POST',
-        body: JSON.stringify({ dosya_no: dosyaNo.trim(), yil: yil.trim(), alt_kategori: maddeSecimi }),
+        body: JSON.stringify(istekGovdesi),
       });
       const data = await response.json();
-      setKisiselSonuc(data);
+      if (data.durum === 'kategori_secilmeli') {
+        setKategoriSecenekleri(data.secenekler || []);
+      } else {
+        setKisiselSonuc(data);
+      }
     } catch {
       setKisiselHata(t.hataBaglanti);
     } finally {
       setKisiselYukleniyor(false);
     }
+  };
+
+  // Kullanıcı, "birden fazla kategoride bulundu" adımında kendi kategorisini
+  // seçince -- ayrı bir buton beklemeden ANINDA o kategoriyle tekrar sorgula.
+  const kategoriSecildi = (secilen: string) => {
+    kisiselSorgula(secilen);
   };
 
   // --- Genel istatistik (ekran açılınca otomatik yüklenir) ---
@@ -147,21 +167,29 @@ export default function IstatistiklerEkrani() {
               />
             </View>
 
-            <Text style={styles.maddeEtiket}>{t.altKategoriEtiket}</Text>
-            <View style={styles.maddeSatir}>
-              {MADDE_SECENEKLERI.map((madde) => (
-                <TouchableOpacity
-                  key={madde}
-                  style={[styles.maddeChip, maddeSecimi === madde && styles.maddeChipAktif]}
-                  onPress={() => setMaddeSecimi(maddeSecimi === madde ? null : madde)}
-                >
-                  <Text style={[styles.maddeChipMetin, maddeSecimi === madde && styles.maddeChipMetinAktif]}>{madde}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {/* 2026-09-17: sabit "Alt Kategori" seçim adımı kaldırıldı --
+                bkz. dosya başındaki not. Sadece backend "kategori_secilmeli"
+                dediğinde (nadir, ~%0,7), aşağıda o dosyanın GERÇEKTEN
+                bulunduğu kategoriler gösteriliyor. */}
+            {kategoriSecenekleri && kategoriSecenekleri.length > 0 && (
+              <>
+                <Text style={styles.maddeEtiket}>{t.istatistikMaddeSeciniz}</Text>
+                <View style={styles.maddeSatir}>
+                  {kategoriSecenekleri.map((madde) => (
+                    <TouchableOpacity
+                      key={madde}
+                      style={styles.maddeChip}
+                      onPress={() => kategoriSecildi(madde)}
+                    >
+                      <Text style={styles.maddeChipMetin}>{madde}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
 
             {kisiselHata ? <Text style={styles.hataMetin}>{kisiselHata}</Text> : null}
-            <TouchableOpacity style={styles.gorüntuleButon} onPress={kisiselSorgula} disabled={kisiselYukleniyor}>
+            <TouchableOpacity style={styles.gorüntuleButon} onPress={() => kisiselSorgula()} disabled={kisiselYukleniyor}>
               {kisiselYukleniyor ? (
                 <ActivityIndicator color={LACIVERT} />
               ) : (
@@ -181,12 +209,23 @@ export default function IstatistiklerEkrani() {
                     {t.istatistikKisiselOnaylanmis.replace('{yil}', kisiselSonuc.yil)}
                   </Text>
                 )}
+                {kisiselSonuc.durum === 'kuyruk_disi' && (
+                  <Text style={styles.durumMetni}>
+                    {t.istatistikKuyrukDisi.replace('{kategori}', kisiselSonuc.alt_kategori)}
+                  </Text>
+                )}
                 {kisiselSonuc.durum === 'bekliyor' && (() => {
                   const ky = kisiselSonuc.kendi_yilinda;
                   const tz = kisiselSonuc.tum_zamanlar;
                   const kalan = ky.yil_toplam_bekleyen - ky.sirasi;
                   return (
                     <>
+                      {/* 2026-09-17: kategori artık kullanıcı tarafından
+                          seçilmediği (çoğunlukla otomatik tespit edildiği)
+                          için, şeffaflık amacıyla burada açıkça gösteriliyor. */}
+                      <Text style={styles.tespitEdilenKategori}>
+                        {t.istatistikKategoriEtiketi.replace('{kategori}', kisiselSonuc.alt_kategori)}
+                      </Text>
                       <Text style={styles.durumMetni}>
                         {t.istatistikKisiselBekliyor
                           .replace('{yil}', kisiselSonuc.yil)
@@ -377,6 +416,10 @@ const styles = StyleSheet.create({
   gorüntuleButon: { backgroundColor: ALTIN, borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
   gorüntuleButonMetin: { color: LACIVERT, fontWeight: '800', fontSize: 14.5 },
   sonucIcerik: { marginTop: 18 },
+  tespitEdilenKategori: {
+    color: ALTIN, fontSize: 11.5, fontWeight: '700', textAlign: 'center',
+    marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.3,
+  },
   durumMetni: { color: BEYAZ, fontSize: 14.5, lineHeight: 21, textAlign: 'center', fontWeight: '600' },
   tahminUyarisi: { color: GRI, fontSize: 11.5, textAlign: 'center', marginTop: 6, fontStyle: 'italic' },
   grafikAltYazi: { color: GRI, fontSize: 12, marginTop: 10, textAlign: 'center' },

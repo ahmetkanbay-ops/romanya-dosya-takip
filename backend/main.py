@@ -77,6 +77,7 @@ from dosya_utils import (
     sira_tahmini_hesapla,
     ziyaretci_sayisini_oku,
     yeni_ziyaretci_kaydet,
+    _BEKLEME_KUYRUGU_ALT_KATEGORILERI,
 )
 from hukuki_metinler import (
     KULLANIM_SARTLARI_METIN,
@@ -1801,7 +1802,10 @@ def sorgula(veri: SorguIstegi, request: Request, _anahtar=Depends(app_anahtarini
 class SiraTahminiIstegi(BaseModel):
     dosya_no: str = Field(max_length=100)
     yil: str = Field(max_length=10)
-    alt_kategori: str = Field(max_length=100)
+    # 2026-09-17 DEĞİŞİKLİĞİ: artık OPSİYONEL -- bkz. endpoint'in altındaki
+    # not. Boş/None gönderilirse sistem kategoriyi kendisi tespit etmeyi
+    # dener.
+    alt_kategori: Optional[str] = Field(default=None, max_length=100)
 
 
 @app.post("/api/sira-tahmini")
@@ -1817,10 +1821,28 @@ def sira_tahmini(veri: SiraTahminiIstegi, request: Request, _anahtar=Depends(app
     sırasını birebir takip ettiğinin GARANTİSİ yoktur (bugüne kadarki
     canlı gözlemlerimizde kararnamelerin numara sırasına uymadığı
     görüldü). Mobil tarafta bu netlik korunarak sunulmalı.
+
+    2026-09-17 GÜNCELLEMESİ (kullanıcı analizi + veritabanı ölçümü):
+    alt_kategori artık OPSİYONEL hale getirildi. Gerekçe: aynı
+    (dosya_no_norm, yıl) ikilisi stadiu içinde ölçüldüğünde %99,3
+    ihtimalle SADECE TEK bir alt kategoride geçiyor (986.674
+    kombinasyondan sadece 6.900'ü -- %0,7 -- birden fazla kategoride) --
+    yani kullanıcıların ezici çoğunluğu için elle kategori seçtirmek
+    gereksiz bir adımmış. Artık alt_kategori boş gönderilirse:
+      - stadiu'da TEK kategoride eşleşme varsa -> doğrudan o kategori
+        için hesaplanır (hangi kategori olduğu yanıtta belirtilir).
+      - BİRDEN FAZLA kategoride eşleşme varsa (nadir, ~%0,7) -> "durum":
+        "kategori_secilmeli" ile SADECE o numaranın GERÇEKTEN göründüğü
+        kategoriler "secenekler" alanında döner (sabit 6'lık liste
+        DEĞİL) -- mobil taraf bunu ikinci bir seçim adımı olarak
+        gösterip aynı isteği bu sefer alt_kategori doldurarak tekrar
+        atar.
+    alt_kategori dolu gönderilirse (bu ikinci adımdan sonra, ya da eski
+    istemcilerden) davranış öncekiyle birebir aynı.
     """
     dosya_no_norm = sayisal_cekirdek(veri.dosya_no)
     yil = veri.yil.strip()
-    alt_kategori = veri.alt_kategori.strip()
+    alt_kategori = (veri.alt_kategori or "").strip() or None
     if not dosya_no_norm:
         raise HTTPException(status_code=400, detail="Geçersiz dosya numarası.")
 
@@ -1833,6 +1855,8 @@ def sira_tahmini(veri: SiraTahminiIstegi, request: Request, _anahtar=Depends(app
     # bu da yanlış "onaylandı" eşleşmesi riski taşıyordu). Önce ordine'de
     # AYNI numara+yıl (herhangi ordine alt kategorisinde -- bugün canlı
     # doğrulanan güvenli eşleştirme ilkesiyle tutarlı) var mı bakılıyor.
+    # Bu kontrol alt_kategori seçiminden TAMAMEN bağımsız -- zaten
+    # onaylanmış bir dosya için hangi kategoriyi seçtiği önemsiz.
     cursor.execute(
         "SELECT COUNT(*) FROM dosyalar WHERE ana_kategori='ordine' AND dosya_no_norm=? AND yil=?",
         (dosya_no_norm, yil),
@@ -1844,6 +1868,51 @@ def sira_tahmini(veri: SiraTahminiIstegi, request: Request, _anahtar=Depends(app
         return {
             "bulundu": True,
             "durum": "onaylanmis",
+            "dosya_no": veri.dosya_no,
+            "yil": yil,
+            "alt_kategori": alt_kategori,
+        }
+
+    if not alt_kategori:
+        cursor.execute(
+            "SELECT DISTINCT alt_kategori FROM dosyalar "
+            "WHERE ana_kategori='stadiu' AND dosya_no_norm=? AND yil=?",
+            (dosya_no_norm, yil),
+        )
+        eslesen_kategoriler = [row[0] for row in cursor.fetchall()]
+
+        if len(eslesen_kategoriler) == 0:
+            conn.close()
+            return {
+                "bulundu": False,
+                "durum": "bulunamadi",
+                "dosya_no": veri.dosya_no,
+                "yil": yil,
+                "alt_kategori": None,
+            }
+
+        if len(eslesen_kategoriler) > 1:
+            conn.close()
+            return {
+                "bulundu": True,
+                "durum": "kategori_secilmeli",
+                "dosya_no": veri.dosya_no,
+                "yil": yil,
+                "secenekler": eslesen_kategoriler,
+            }
+
+        alt_kategori = eslesen_kategoriler[0]
+
+    # Mülakat sonuç/davet listeleri (REZULTATE/INVITATII ART. 8 / 8.1) bir
+    # bekleme kuyruğu DEĞİL -- sıralı bir liste değil, sonuç/davet durumu.
+    # sira_tahmini_hesapla zaten bunlar için None (yani "bulunamadı")
+    # dönerdi, ama bu YANILTICI -- dosya gerçekten var, sadece bu ekranın
+    # kapsamı dışında. Kullanıcıya bunu açıkça söylemek daha dürüst.
+    if alt_kategori not in _BEKLEME_KUYRUGU_ALT_KATEGORILERI:
+        conn.close()
+        return {
+            "bulundu": True,
+            "durum": "kuyruk_disi",
             "dosya_no": veri.dosya_no,
             "yil": yil,
             "alt_kategori": alt_kategori,
