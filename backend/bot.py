@@ -260,7 +260,7 @@ def _mesai_saatinde_mi():
     return 8 <= datetime.now(ROMANYA_SAAT_DILIMI).hour <= 17
 
 
-def _site_erisilebilir_mi(page, url, deneme_sayisi=2):
+def _site_erisilebilir_mi(page, url, deneme_sayisi=3):
     """Taramaya başlamadan önce sitenin ayakta olup olmadığını kontrol eder.
 
     KESİN TESPİT (2026-08-14): elle açılan bir tarayıcıda (hem ev interneti
@@ -278,14 +278,18 @@ def _site_erisilebilir_mi(page, url, deneme_sayisi=2):
     için elle açılan tarayıcıyla birebir aynı davranışı gösterir, bu
     nedenle bu engelin dışında kalır.
     """
+    # 2026-09-18 SABIRLI TEKRAR DENEME: 9/11/15/17/18 Eylul'de tarama basinda
+    # (11:01 ve 15:01) Render'dan bu kontrol 2x25sn'de vazgecip Stadiu
+    # bolumunu atladi, ayni anda elle acilan tarayici siteye giriyordu
+    # (gecici yavaslik). Simdi 3 deneme x 45sn, aralarda 20/40sn bekleme.
     for deneme in range(1, deneme_sayisi + 1):
         try:
-            page.goto(url, wait_until="domcontentloaded", timeout=25000)
+            page.goto(url, wait_until="domcontentloaded", timeout=45000)
             return True
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"  (erisim denemesi {deneme}/{deneme_sayisi} basarisiz: {str(e)[:90]})")
         if deneme < deneme_sayisi:
-            time.sleep(deneme * 3)
+            time.sleep(deneme * 20)
     return False
 
 
