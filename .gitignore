@@ -70,3 +70,7 @@ backend/render_yedekleri/
 
 # Google Cloud servis hesabi anahtari -- ASLA commit edilmemeli (EAS submit icin)
 gcp-service-account.json
+
+# gecici tarama gunlugu dokumleri
+backend/bugun_log.json
+backend/bugun_log.txt
