@@ -216,3 +216,33 @@ class TestMesajVeDurum:
     def test_stadiu_islemde_mesaji(self):
         mesaj, durum = mesaj_ve_durum("stadiu")
         assert durum == "İŞLEMDE"
+
+
+# --- tarama tazeligi (hafta sonu bosluguna duyarli) ---
+def _rt(y, a, g, s, d=0):
+    from datetime import datetime
+    from dosya_utils import ROMANYA_SAAT_DILIMI
+    return datetime(y, a, g, s, d, tzinfo=ROMANYA_SAAT_DILIMI)
+
+
+def test_hafta_sonu_bosluk_sahte_alarm_uretmez():
+    from dosya_utils import tarama_taze_mi
+    cuma_son = _rt(2026, 9, 18, 18, 50)
+    assert tarama_taze_mi(cuma_son, _rt(2026, 9, 20, 1, 0))    # Pazar gecesi (bugunku alarm)
+    assert tarama_taze_mi(cuma_son, _rt(2026, 9, 20, 9, 0))    # Pazar 09:00
+    assert tarama_taze_mi(cuma_son, _rt(2026, 9, 21, 10, 0))   # Pazartesi sabahi, tarama oncesi
+    assert tarama_taze_mi(cuma_son, _rt(2026, 9, 21, 12, 30))  # Pzt 11:00 taramasi henuz 2 saat gecmedi
+
+
+def test_kacirilan_tarama_hala_yakalanir():
+    from dosya_utils import tarama_taze_mi
+    cuma_son = _rt(2026, 9, 18, 18, 50)
+    assert not tarama_taze_mi(cuma_son, _rt(2026, 9, 21, 13, 30))  # Pzt 11:00 taramasi yok
+    persembe = _rt(2026, 9, 17, 18, 50)
+    assert not tarama_taze_mi(persembe, _rt(2026, 9, 18, 14, 0))   # Cuma 11:00 kacti
+
+
+def test_hafta_ici_normal_akis():
+    from dosya_utils import tarama_taze_mi
+    assert tarama_taze_mi(_rt(2026, 9, 16, 11, 5), _rt(2026, 9, 16, 15, 0))
+    assert tarama_taze_mi(_rt(2026, 9, 16, 18, 50), _rt(2026, 9, 17, 9, 0))

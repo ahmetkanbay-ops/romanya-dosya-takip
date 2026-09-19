@@ -25,7 +25,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-from dosya_utils import ROMANYA_SAAT_DILIMI, kategori_yolu_goster
+from dosya_utils import ROMANYA_SAAT_DILIMI, kategori_yolu_goster, tarama_taze_mi
 
 # 2026-08-19 DÜZELTMESİ (kullanıcı fark etti, verileri panelle çapraz
 # doğruladıktan sonra sordu): rakamların KENDİSİ hep doğruydu ama "bugün/
@@ -247,7 +247,12 @@ def _bot_taramasi_durumu(son_basarili_tarama, son_tarama_detay):
     except Exception:
         yas_saat = 999
     detay = f" — {son_tarama_detay}" if son_tarama_detay else ""
-    if yas_saat <= 30:
+    # 2026-09-20: eski sabit 30 saat esigi hafta sonu (tarama kapali) sahte
+    # alarm uretiyordu -- artik planli takvime gore (bkz. tarama_taze_mi).
+    taze = yas_saat <= 30
+    if not taze and yas_saat != 999:
+        taze = tarama_taze_mi(ayristirilan, datetime.now(ROMANYA_SAAT_DILIMI))
+    if taze:
         return {"ikon": "🤖", "ad": "Günlük Tarama", "durum": "iyi", "mesaj": f"{yas_saat:.0f} saat önce çalıştı{detay}"}
     return {"ikon": "🤖", "ad": "Günlük Tarama", "durum": "uyari", "mesaj": f"{yas_saat:.0f} saattir çalışmadı{detay}"}
 

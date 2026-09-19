@@ -67,6 +67,7 @@ except ImportError:
     _SLOWAPI_VAR = False
 
 from dosya_utils import (
+    tarama_taze_mi,
     tabloyu_hazirla,
     sayisal_cekirdek,
     tum_rakamlar,
@@ -1059,6 +1060,10 @@ def site_durumu():
                 tarama_zamani = tarama_zamani.replace(tzinfo=ROMANYA_SAAT_DILIMI)
             gecen_saat = (datetime.now(ROMANYA_SAAT_DILIMI) - tarama_zamani).total_seconds() / 3600
             servis_disi = gecen_saat > SON_TARAMA_TAZELIK_ESIGI_SAAT
+            if servis_disi:
+                # 2026-09-20: hafta sonu tarama kapali -- sabit saat esigi
+                # Pazar/Pazartesi sabahi yanlis "servis disi" bandi uretirdi.
+                servis_disi = not tarama_taze_mi(tarama_zamani, datetime.now(ROMANYA_SAAT_DILIMI))
         except Exception:
             servis_disi = False  # bozuk/okunamayan zaman damgasında güvenli tarafta kal
 

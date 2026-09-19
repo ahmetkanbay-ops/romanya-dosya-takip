@@ -13,6 +13,7 @@ import re
 import sqlite3
 import time
 import unicodedata
+from datetime import datetime, time as _saat, timedelta
 from zoneinfo import ZoneInfo
 
 # 2026-08-19 DÜZELTMESİ (kullanıcı sordu: "16384 numaralı dosya neden
@@ -28,6 +29,34 @@ from zoneinfo import ZoneInfo
 # Render, başka bir bulut) artık hep AYNI, doğru saatte tarama yapılır.
 # main.py, bot.py, admin_panel.py hepsi BURADAN import ediyor.
 ROMANYA_SAAT_DILIMI = ZoneInfo("Europe/Bucharest")
+
+# Planli tarama takvimi (main.py lifespan ile AYNI olmali): sadece hafta ici
+# 11:00 ve 18:45 (Romanya saati), Cumartesi/Pazar kapali.
+PLANLI_TARAMA_SAATLERI = ((18, 45), (11, 0))
+
+
+def son_planli_tarama_zamani(simdi):
+    """`simdi`den once gelen en son PLANLI tarama zamanini dondurur."""
+    for gun_farki in range(8):
+        gun = (simdi - timedelta(days=gun_farki)).date()
+        if gun.weekday() >= 5:
+            continue
+        for saat, dakika in PLANLI_TARAMA_SAATLERI:
+            slot = datetime.combine(gun, _saat(saat, dakika), tzinfo=ROMANYA_SAAT_DILIMI)
+            if slot <= simdi:
+                return slot
+    return None
+
+
+def tarama_taze_mi(tarama_zamani, simdi, tolerans_saat=2):
+    """Son basarili tarama takvime gore taze mi? Hafta sonu bosluguna (Cuma
+    18:45 -> Pazartesi 11:00) duyarli: eski sabit 'x saat' esigi hafta
+    sonu sahte alarm uretiyordu. Planli bir tarama zamani `tolerans_saat`
+    gectiyse ve ondan sonra basarili tarama yoksa bayat sayilir."""
+    slot = son_planli_tarama_zamani(simdi - timedelta(hours=tolerans_saat))
+    if slot is None:
+        return True
+    return tarama_zamani >= slot - timedelta(minutes=30)
 
 # ---------------------------------------------------------------------------
 # KATEGORİ TANIMLARI (mobil uygulamadaki (app/(tabs)/index.tsx) listeyle
