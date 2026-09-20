@@ -1,3 +1,4 @@
+import gzip
 import os
 import shutil
 import subprocess
@@ -555,6 +556,7 @@ def b2_yedegini_yukle(yerel_dosya_yolu):
     sessizce atlanır -- yerel yedekleme bundan etkilenmez."""
     if not (B2_KEY_ID and B2_APPLICATION_KEY and B2_BUCKET_ADI and B2_ENDPOINT):
         return {"durum": "atlandi", "sebep": "B2_* ortam değişkenleri ayarlı değil"}
+    gz_yol = None
     try:
         import boto3
         from botocore.config import Config as _BotoConfig
@@ -610,7 +612,14 @@ def b2_yedegini_yukle(yerel_dosya_yolu):
             max_concurrency=1,
             use_threads=True,
         )
-        dosya_adi = os.path.basename(yerel_dosya_yolu)
+        # 2026-09-21: yedek artik gzip'lenerek yukleniyor (~1GB/gece dis trafik
+        # Render bant genisligi kotasini (5GB) 19GB'a cikarmisti). SQLite
+        # sikistirilinca genelde birkac kat kuculur. Geri yukleme: gunzip.
+        gz_yol = yerel_dosya_yolu + ".gz"
+        with open(yerel_dosya_yolu, "rb") as _f_in, gzip.open(gz_yol, "wb", compresslevel=6) as _f_out:
+            shutil.copyfileobj(_f_in, _f_out, length=1024 * 1024)
+        print(f"  (B2 icin sikistirildi: {os.path.getsize(yerel_dosya_yolu) / 1048576:.0f} MB -> {os.path.getsize(gz_yol) / 1048576:.0f} MB)")
+        dosya_adi = os.path.basename(gz_yol)
         anahtar = f"veritabani-yedekleri/{dosya_adi}"
 
         # 2026-08-30 DUZELTMESI: 30 Agustos gecesi "Connection was closed
@@ -624,7 +633,7 @@ def b2_yedegini_yukle(yerel_dosya_yolu):
         son_hata = None
         for deneme in range(1, 4):
             try:
-                s3.upload_file(yerel_dosya_yolu, B2_BUCKET_ADI, anahtar, Config=_aktarim_ayari)
+                s3.upload_file(gz_yol, B2_BUCKET_ADI, anahtar, Config=_aktarim_ayari)
                 son_hata = None
                 break
             except Exception as e:
@@ -633,6 +642,10 @@ def b2_yedegini_yukle(yerel_dosya_yolu):
                     bekleme = 5 * deneme
                     print(f"⚠️  B2 yükleme denemesi {deneme}/3 başarısız ({str(e)[:80]}), {bekleme}sn sonra tekrar...")
                     time.sleep(bekleme)
+        try:
+            os.remove(gz_yol)
+        except OSError:
+            pass
         if son_hata is not None:
             raise son_hata
         print(f"✓ Bulut (B2) yedeği yüklendi: {anahtar}")
@@ -651,6 +664,11 @@ def b2_yedegini_yukle(yerel_dosya_yolu):
         print("⚠️  B2_* ayarlı ama boto3 paketi kurulu değil -- bulut yedekleme devre dışı.")
         return {"durum": "atlandi", "sebep": "boto3 kurulu değil"}
     except Exception as e:
+        if gz_yol and os.path.isfile(gz_yol):
+            try:
+                os.remove(gz_yol)
+            except OSError:
+                pass
         print(f"✗ Bulut (B2) yedekleme hatası: {e}")
         try:
             from bildirim import admin_kritik_uyari
