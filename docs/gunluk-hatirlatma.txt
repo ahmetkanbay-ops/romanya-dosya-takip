@@ -1,0 +1,8 @@
+1) Play Store URETIM ONAYI bekleniyor (16 Eylul'den beri incelemede). Onaylaninca: tanitim_sayfasi.py'de PLAY_STORE_URL'yi doldur, Instagram/Facebook'taki Play Store linkini kontrol et.
+2) Elif videosu: HeyGen'de yeni metinle uret (dogal ses ElevenLabs'ten secilecek) -> dosyayi Claude'a ver -> TEK final video -> site + Instagram + Facebook. Yayin: Play Store ve App Store ikisi de yayinda olunca.
+3) iOS / App Store yayini (Apple Developer bekleniyor). Cikinca Elif videosunu ve tanitim sayfasini guncelle.
+4) Subat 2027'ye kadar: Android kod kucultmeyi (DEX %1 -> %25+) bir sonraki surumde ac (Play Console uyarisi).
+5) Gozcu: sabah taramalarinda "erisilemiyor" uyari sikligini izle (retry 3x45sn, 18 Eylul).
+6) Render bant kotasi: sikistirilmis yedekten sonra Ekim'de 5 GB altinda mi bak (gunluk ~105 MB).
+7) Facebook: eski numarali ikinci hesap sorunu (hicbir hesap silinmedi), ileride Meta destegi.
+8) Acik teknik isler: hesap/cihaz senkronizasyonu, bot.py kilidi (mutex), yerel B2 yedek indirme scripti, Search Console kotasi, Sentry eski kayitlar, olu kod temizligi.
