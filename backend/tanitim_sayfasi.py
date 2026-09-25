@@ -30,7 +30,7 @@ import html as _html_modul
 # tarayıcı eski önbelleklenmiş kopyayı DEĞİL, her zaman güncel dosyayı ister.
 _TANITIM_JS_SURUMU = 5
 
-PLAY_STORE_URL = None  # Uygulama YAYINLANINCA (üretim onayı gelince) gerçek Play Store linki buraya girilecek.
+PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.knby.romanyadosyatakip"  # 2026-09-25: uygulama Play Store'da yayında (sayfa 200, fiyat 750).
 
 # 2026-09-13: Google'a "Üretime başvur" gönderildi (inceleme genellikle
 # ~7 gün sürüyor) -- ama henüz ONAYLANMADI, yani PLAY_STORE_URL hâlâ
