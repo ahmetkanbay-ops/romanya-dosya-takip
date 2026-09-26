@@ -69,6 +69,11 @@ except ImportError:
 
 from dosya_utils import (
     tarama_taze_mi,
+    bot_mu,
+    ziyaret_gunu,
+    ziyareti_kaydet,
+    haric_istegi_say,
+    ziyaret_gunluk_ozeti,
     tabloyu_hazirla,
     sayisal_cekirdek,
     tum_rakamlar,
@@ -90,7 +95,7 @@ from pywebpush import webpush, WebPushException
 from admin_panel import (
     metrikleri_hesapla, admin_sayfa_html, admin_giris_html,
     bugunun_durumu_html_getir, bugunun_durumu_verisini_getir,
-    tarama_gecmisi_verisini_getir, tarama_gecmisi_html,
+    tarama_gecmisi_verisini_getir, tarama_gecmisi_html, ziyaret_takibi_html,
 )
 from tanitim_sayfasi import tanitim_sayfasi_html
 
@@ -193,6 +198,8 @@ ADMIN_OTURUM_COOKIE_SECURE = os.environ.get("RENDER") is not None
 # çerezindeki AYNI desen (Render'da HTTPS var, yerel LAN'da düz HTTP).
 ZIYARETCI_COOKIE_ADI = "ziyaret_edildi"
 ZIYARETCI_COOKIE_GECERLILIK_SN = 10 * 365 * 24 * 60 * 60  # ~10 yıl, fiilen kalıcı
+ZIYARETCI_KIMLIK_COOKIE_ADI = "ziyaretci_id"  # 2026-09-26: gunluk benzersiz takip icin rastgele kimlik (kisisel veri degil)
+ZIYARET_HARIC_COOKIE_ADI = "ziyaret_haric"  # admin "beni sayma" dedigi tarayicilar
 
 
 def _admin_oturum_imzala(son_gecerlilik_ts: int) -> str:
@@ -935,13 +942,36 @@ def root(request: Request):
         onbellek["zaman"] = simdi
     veri = onbellek["veri"]
 
+    # 2026-09-26 (kullanici isteği -- "kendi girişlerimi de sayıyor"): sayaç
+    # artık (1) bot/önizleme/komut satırı istemcilerini, (2) admin oturumu
+    # açık ya da "beni sayma" çerezi olan tarayıcıları SAYMIYOR; ayrıca her
+    # ziyaret gün bazında (benzersiz kimlik başına günde 1) kaydediliyor.
+    haric_mi = (
+        bot_mu(request.headers.get("user-agent"))
+        or request.cookies.get(ZIYARET_HARIC_COOKIE_ADI) == "1"
+        or _admin_oturum_dogrula(request)
+    )
+    eski_cerez_vardi = request.cookies.get(ZIYARETCI_COOKIE_ADI) == "1"
+    kimlik = request.cookies.get(ZIYARETCI_KIMLIK_COOKIE_ADI)
+    yeni_kimlik_uretildi = False
     conn = veritabani_baglantisi(DB_FILE)
     try:
-        yeni_ziyaretci_mi = request.cookies.get(ZIYARETCI_COOKIE_ADI) != "1"
-        if yeni_ziyaretci_mi:
-            toplam_ziyaretci = yeni_ziyaretci_kaydet(conn)
-        else:
+        gun = ziyaret_gunu()
+        if haric_mi:
+            haric_istegi_say(conn, gun)
+            yeni_ziyaretci_mi = False
             toplam_ziyaretci = ziyaretci_sayisini_oku(conn)
+        else:
+            if not kimlik:
+                kimlik = secrets.token_hex(16)
+                yeni_kimlik_uretildi = True
+            ziyareti_kaydet(conn, gun, kimlik, eski_cerezi_vardi=eski_cerez_vardi)
+            # herkese açık toplam sadece GERÇEKTEN yeni bir tarayıcı için artar
+            yeni_ziyaretci_mi = (not eski_cerez_vardi) and yeni_kimlik_uretildi
+            if yeni_ziyaretci_mi:
+                toplam_ziyaretci = yeni_ziyaretci_kaydet(conn)
+            else:
+                toplam_ziyaretci = ziyaretci_sayisini_oku(conn)
     finally:
         conn.close()
 
@@ -956,15 +986,19 @@ def root(request: Request):
         icerik = tanitim_sayfasi_html(toplam_ziyaretci=toplam_ziyaretci)
 
     yanit = HTMLResponse(content=icerik)
-    if yeni_ziyaretci_mi:
-        yanit.set_cookie(
-            key=ZIYARETCI_COOKIE_ADI,
-            value="1",
-            max_age=ZIYARETCI_COOKIE_GECERLILIK_SN,
-            httponly=True,
-            samesite="lax",
-            secure=ADMIN_OTURUM_COOKIE_SECURE,
-        )
+    if not haric_mi:
+        if yeni_kimlik_uretildi:
+            yanit.set_cookie(
+                key=ZIYARETCI_KIMLIK_COOKIE_ADI, value=kimlik,
+                max_age=ZIYARETCI_COOKIE_GECERLILIK_SN, httponly=True,
+                samesite="lax", secure=ADMIN_OTURUM_COOKIE_SECURE,
+            )
+        if not eski_cerez_vardi:
+            yanit.set_cookie(
+                key=ZIYARETCI_COOKIE_ADI, value="1",
+                max_age=ZIYARETCI_COOKIE_GECERLILIK_SN, httponly=True,
+                samesite="lax", secure=ADMIN_OTURUM_COOKIE_SECURE,
+            )
     return yanit
 
 
@@ -1143,6 +1177,39 @@ def admin_tarama_gecmisi(request: Request):
     finally:
         conn.close()
     return tarama_gecmisi_html(taramalar)
+
+
+@app.get("/admin/ziyaretler", response_class=HTMLResponse)
+def admin_ziyaretler(request: Request):
+    """2026-09-26 (kullanıcı isteği): web sayfasını gün gün kaç benzersiz
+    kişinin ziyaret ettiğini gösteren sayfa (bkz. ziyaret_gunluk_ozeti)."""
+    if not _admin_oturum_dogrula(request):
+        return RedirectResponse(url="/admin/giris", status_code=303)
+    conn = veritabani_baglantisi(DB_FILE)
+    try:
+        ozet = ziyaret_gunluk_ozeti(conn)
+    finally:
+        conn.close()
+    haric_aktif = request.cookies.get(ZIYARET_HARIC_COOKIE_ADI) == "1"
+    return ziyaret_takibi_html(ozet, haric_aktif)
+
+
+@app.get("/admin/ziyaretler/beni-sayma")
+def admin_beni_sayma(request: Request, ac: int = 1):
+    """Bu tarayıcıyı ziyaretçi sayacından hariç tutar (ac=1) ya da geri alır
+    (ac=0). Sadece admin oturumu açıkken çalışır."""
+    if not _admin_oturum_dogrula(request):
+        return RedirectResponse(url="/admin/giris", status_code=303)
+    yanit = RedirectResponse(url="/admin/ziyaretler", status_code=303)
+    if ac:
+        yanit.set_cookie(
+            key=ZIYARET_HARIC_COOKIE_ADI, value="1",
+            max_age=ZIYARETCI_COOKIE_GECERLILIK_SN, httponly=True,
+            samesite="lax", secure=ADMIN_OTURUM_COOKIE_SECURE,
+        )
+    else:
+        yanit.delete_cookie(ZIYARET_HARIC_COOKIE_ADI)
+    return yanit
 
 
 @app.get("/admin/giris", response_class=HTMLResponse)

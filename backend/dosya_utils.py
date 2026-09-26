@@ -498,6 +498,91 @@ def yeni_ziyaretci_kaydet(conn):
     return ziyaretci_sayisini_oku(conn)
 
 
+# 2026-09-26: sayaca GIRMEMESI gereken istekler -- arama motoru/sosyal medya
+# onizleme botlari, izleme araclari, komut satiri istemcileri.
+_BOT_DESENI = re.compile(
+    r"bot|crawl|spider|slurp|facebookexternalhit|facebot|meta-external|whatsapp|"
+    r"telegram|twitter|linkedin|preview|curl|wget|python-|go-http|httpx|aiohttp|"
+    r"headless|lighthouse|pingdom|uptime|monitor|render|hookshot|java/|libwww|"
+    r"node-fetch|axios|okhttp|scrapy|phantom",
+    re.IGNORECASE,
+)
+
+
+def bot_mu(user_agent):
+    """Bos ya da bilinen bot/arac imzali User-Agent'lar ziyaretci sayilmaz."""
+    if not user_agent or not user_agent.strip():
+        return True
+    return bool(_BOT_DESENI.search(user_agent))
+
+
+def ziyaret_gunu(simdi=None):
+    """Ziyaret gunu, projenin geri kalaniyla ayni saat diliminde (Romanya)."""
+    simdi = simdi or datetime.now(ROMANYA_SAAT_DILIMI)
+    return simdi.strftime("%Y-%m-%d")
+
+
+def ziyareti_kaydet(conn, gun, ziyaretci_id, eski_cerezi_vardi=False):
+    """Gunluk benzersiz ziyaretciyi kaydeder. Ayni kimlik ayni gun birden cok
+    kez gelse de TEK sayilir. Kimligi ilk kez goruyorsa True doner."""
+    yeni_kimlik = conn.execute(
+        "INSERT OR IGNORE INTO ziyaretci_kimlik (id, ilk_gun, eski) VALUES (?, ?, ?)",
+        (ziyaretci_id, gun, 1 if eski_cerezi_vardi else 0),
+    ).rowcount > 0
+    conn.execute(
+        "INSERT OR IGNORE INTO ziyaret_gunluk (gun, ziyaretci_id) VALUES (?, ?)",
+        (gun, ziyaretci_id),
+    )
+    guvenli_commit(conn)
+    return yeni_kimlik
+
+
+def haric_istegi_say(conn, gun):
+    """Bot/kendi ziyaretin gibi sayilmayan istekleri gunluk sayar (sadece
+    'filtre calisiyor mu' gorunurlugu icin)."""
+    conn.execute(
+        "INSERT INTO ziyaret_haric_gunluk (gun, sayi) VALUES (?, 1) "
+        "ON CONFLICT(gun) DO UPDATE SET sayi = sayi + 1",
+        (gun,),
+    )
+    guvenli_commit(conn)
+
+
+def ziyaret_gunluk_ozeti(conn, gun_sayisi=60):
+    """Admin sayfasi icin: gun gun benzersiz ziyaretci, ilk kez gelen,
+    tekrar gelen ve sayilmayan (bot/kendi) istek; ayrica toplamlar."""
+    satirlar = conn.execute(
+        """
+        SELECT g.gun,
+               COUNT(*) AS benzersiz,
+               SUM(CASE WHEN k.ilk_gun = g.gun AND k.eski = 0 THEN 1 ELSE 0 END) AS yeni
+        FROM ziyaret_gunluk g
+        LEFT JOIN ziyaretci_kimlik k ON k.id = g.ziyaretci_id
+        GROUP BY g.gun ORDER BY g.gun DESC LIMIT ?
+        """,
+        (gun_sayisi,),
+    ).fetchall()
+    haric = dict(conn.execute("SELECT gun, sayi FROM ziyaret_haric_gunluk").fetchall())
+    gunler = [
+        {
+            "gun": gun,
+            "benzersiz": benzersiz,
+            "yeni": yeni or 0,
+            "tekrar": benzersiz - (yeni or 0),
+            "haric": haric.get(gun, 0),
+        }
+        for gun, benzersiz, yeni in satirlar
+    ]
+    toplam_benzersiz = conn.execute("SELECT COUNT(*) FROM ziyaretci_kimlik").fetchone()[0]
+    ilk = conn.execute("SELECT MIN(gun) FROM ziyaret_gunluk").fetchone()[0]
+    return {
+        "gunler": gunler,
+        "toplam_benzersiz": toplam_benzersiz,
+        "takip_baslangici": ilk,
+        "eski_sayac": ziyaretci_sayisini_oku(conn),
+    }
+
+
 def guvenli_commit(conn, deneme=4):
     """conn.commit()'i, geçici 'database is locked' / 'disk I/O error'
     durumlarında artan bekleme süreleriyle birkaç kez yeniden dener.
@@ -836,6 +921,31 @@ def tabloyu_hazirla(conn):
         )
     """)
     cursor.execute("INSERT OR IGNORE INTO site_ziyaretleri (id, toplam) VALUES (1, 0)")
+
+    # 2026-09-26 EKLENTISI (kullanici istegi -- gunluk ziyaretci takibi):
+    # eski sayac (site_ziyaretleri) tarih tutmuyordu ve her cerezsiz istegi
+    # (bot, onizleme tarayicisi, kendi denemeleri) "yeni ziyaretci" sayiyordu.
+    # IP/kisisel veri YOK: sadece tarayicida tutulan rastgele bir kimlik.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ziyaretci_kimlik (
+            id TEXT PRIMARY KEY,
+            ilk_gun TEXT NOT NULL,
+            eski INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ziyaret_gunluk (
+            gun TEXT NOT NULL,
+            ziyaretci_id TEXT NOT NULL,
+            PRIMARY KEY (gun, ziyaretci_id)
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ziyaret_haric_gunluk (
+            gun TEXT PRIMARY KEY,
+            sayi INTEGER NOT NULL DEFAULT 0
+        )
+    """)
 
     conn.commit()
 

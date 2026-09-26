@@ -765,6 +765,129 @@ def tarama_gecmisi_html(taramalar):
 </html>"""
 
 
+_GUN_ADLARI = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"]
+
+
+def _ziyaret_gunu_goster(gun_metni):
+    try:
+        d = datetime.strptime(gun_metni, "%Y-%m-%d")
+        return f"{d.strftime('%d.%m.%Y')} {_GUN_ADLARI[d.weekday()]}"
+    except Exception:
+        return _e(gun_metni)
+
+
+def ziyaret_takibi_html(ozet, haric_aktif):
+    """2026-09-26 (kullanıcı isteği): /admin/ziyaretler -- web sayfasını gün
+    gün kaç benzersiz kişinin ziyaret ettiği. Aynı görsel dil, sadece CSS
+    (CSP satır-içi script'i engelliyor)."""
+    gunler = ozet["gunler"]
+    bugun = gunler[0] if gunler else None
+    son7 = gunler[:7]
+    ort7 = round(sum(g["benzersiz"] for g in son7) / len(son7), 1) if son7 else 0
+    en_yuksek = max((g["benzersiz"] for g in gunler), default=1) or 1
+
+    if gunler:
+        satirlar = []
+        for g in gunler:
+            yuzde = max(2, round(g["benzersiz"] * 100 / en_yuksek))
+            satirlar.append(f"""
+            <tr>
+              <td>{_ziyaret_gunu_goster(g['gun'])}</td>
+              <td class="sayi"><b>{g['benzersiz']}</b></td>
+              <td class="cubuk"><div style="width:{yuzde}%"></div></td>
+              <td class="sayi">{g['yeni']}</td>
+              <td class="sayi">{g['tekrar']}</td>
+              <td class="sayi soluk">{g['haric']}</td>
+            </tr>""")
+        tablo = f"""
+        <table>
+          <thead><tr><th>Gün</th><th class="sayi">Ziyaretçi</th><th></th>
+          <th class="sayi">İlk kez</th><th class="sayi">Tekrar</th><th class="sayi">Sayılmayan</th></tr></thead>
+          <tbody>{''.join(satirlar)}</tbody>
+        </table>"""
+    else:
+        tablo = '<p class="bos">Henüz günlük kayıt yok. Bu sayfa, takip başladıktan sonraki ilk gerçek ziyaretle dolmaya başlar.</p>'
+
+    if haric_aktif:
+        haric_kutusu = ('<div class="not ok">✅ Bu tarayıcı sayaçtan <b>hariç tutuluyor</b> '
+                        '(senin girişlerin sayılmaz). <a href="/admin/ziyaretler/beni-sayma?ac=0">Geri al</a></div>')
+    else:
+        haric_kutusu = ('<div class="not">⚠️ Bu tarayıcı şu an <b>sayılıyor</b>. Kendi girişlerin sayıyı '
+                        'artırmasın diye: <a href="/admin/ziyaretler/beni-sayma?ac=1"><b>Bu tarayıcıyı sayma</b></a> '
+                        '(telefonundan da aynısını yap).</div>')
+
+    bugun_deger = bugun["benzersiz"] if bugun else 0
+    baslangic = _ziyaret_gunu_goster(ozet["takip_baslangici"]) if ozet["takip_baslangici"] else "—"
+
+    return f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ziyaretçiler — Romanya Dosya Takip</title>
+{_ADMIN_PWA_HEAD}
+<style>
+  :root {{
+    --lacivert-koyu: {LACIVERT_KOYU}; --lacivert: {LACIVERT}; --altin: {ALTIN};
+    --zemin: #f6f7fb; --yuzey: #ffffff; --kenar: #e4e7ee;
+    --metin: #1c2433; --metin-ikincil: #6b7280;
+  }}
+  * {{ box-sizing: border-box; }}
+  body {{ margin: 0; padding: 32px 20px 60px; background: var(--zemin); color: var(--metin);
+         font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }}
+  .sayfa {{ max-width: 860px; margin: 0 auto; }}
+  header.ustbilgi {{ display: flex; justify-content: space-between; align-items: baseline;
+                    margin-bottom: 22px; flex-wrap: wrap; gap: 8px; }}
+  header.ustbilgi h1 {{ font-size: 20px; margin: 0; color: var(--lacivert-koyu); }}
+  header.ustbilgi a {{ font-size: 12.5px; color: var(--metin-ikincil); }}
+  .kartlar {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 14px; }}
+  .kart {{ background: var(--yuzey); border: 1px solid var(--kenar); border-radius: 10px; padding: 14px 16px; }}
+  .kart .et {{ font-size: 11.5px; color: var(--metin-ikincil); text-transform: uppercase; letter-spacing: .04em; }}
+  .kart .deger {{ font-size: 26px; font-weight: 700; color: var(--lacivert-koyu); font-variant-numeric: tabular-nums; }}
+  .kart .alt {{ font-size: 11.5px; color: var(--metin-ikincil); }}
+  .not {{ background: #fff7e6; border: 1px solid #f0d9a8; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin: 12px 0; }}
+  .not.ok {{ background: #e9f7ef; border-color: #b9e2c9; }}
+  .genis-kart {{ background: var(--yuzey); border: 1px solid var(--kenar); border-radius: 10px; padding: 16px 18px; margin-top: 12px; overflow-x: auto; }}
+  table {{ width: 100%; border-collapse: collapse; font-size: 13.5px; }}
+  th {{ text-align: left; font-size: 11.5px; color: var(--metin-ikincil); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--kenar); }}
+  td {{ padding: 7px 8px; border-bottom: 1px solid var(--kenar); }}
+  tr:last-child td {{ border-bottom: none; }}
+  .sayi {{ text-align: right; font-variant-numeric: tabular-nums; }}
+  .soluk {{ color: var(--metin-ikincil); }}
+  td.cubuk {{ width: 30%; }}
+  td.cubuk div {{ height: 10px; background: var(--altin); border-radius: 5px; }}
+  p.bos {{ color: var(--metin-ikincil); font-size: 13px; font-style: italic; }}
+  .aciklama {{ font-size: 12px; color: var(--metin-ikincil); line-height: 1.5; margin-top: 14px; }}
+  footer.altbilgi {{ text-align: center; font-size: 11.5px; color: var(--metin-ikincil); margin-top: 30px; }}
+</style>
+</head>
+<body>
+<div class="sayfa">
+  <header class="ustbilgi">
+    <h1>👥 Ziyaretçiler (günlük)</h1>
+    <a href="/admin">← Panele dön</a>
+  </header>
+  <div class="kartlar">
+    <div class="kart"><div class="et">Bugün</div><div class="deger">{bugun_deger}</div><div class="alt">benzersiz kişi</div></div>
+    <div class="kart"><div class="et">Son 7 gün ort.</div><div class="deger">{ort7}</div><div class="alt">günlük</div></div>
+    <div class="kart"><div class="et">Toplam (gerçek)</div><div class="deger">{ozet['toplam_benzersiz']}</div><div class="alt">{baslangic} tarihinden beri</div></div>
+    <div class="kart"><div class="et">Eski sayaç</div><div class="deger" style="color:var(--metin-ikincil)">{ozet['eski_sayac']}</div><div class="alt">bot/tekrar içerir</div></div>
+  </div>
+  {haric_kutusu}
+  <div class="genis-kart">{tablo}</div>
+  <p class="aciklama">
+    <b>Ziyaretçi</b>: o gün siteye giren benzersiz tarayıcı (aynı kişi gün içinde kaç kez girse 1).
+    <b>İlk kez / Tekrar</b>: o gün ilk kez gelenler / daha önce gelmiş olanlar.
+    <b>Sayılmayan</b>: bot, önizleme tarayıcısı (Instagram/Facebook link önizlemesi vb.) ve
+    "sayma" dediğin tarayıcılardan gelen istekler. Kişisel veri/IP tutulmaz.
+    Günlük takip {baslangic} tarihinde başladı; öncesi için gün bilgisi yok.
+  </p>
+  <footer class="altbilgi">Romanya Dosya Takip — günler Romanya saatine göredir.</footer>
+</div>
+</body>
+</html>"""
+
+
 _ADMIN_PWA_HEAD = """
 <link rel="manifest" href="/admin/manifest.json">
 <meta name="theme-color" content="#0f1a2e">
@@ -976,7 +1099,7 @@ def admin_sayfa_html(m):
 <div class="sayfa">
   <header class="ustbilgi">
     <h1><img class="profil-avatar" src="/statik/admin/profil-foto.jpg" alt=""> Admin Paneli</h1>
-    <span class="zaman">Oluşturulma: {m['olusturma_zamani']} · <a href="/admin/tarama-gecmisi" style="color:var(--metin-ikincil)">Tarama Geçmişi →</a></span>
+    <span class="zaman">Oluşturulma: {m['olusturma_zamani']} · <a href="/admin/tarama-gecmisi" style="color:var(--metin-ikincil)">Tarama Geçmişi →</a> · <a href="/admin/ziyaretler" style="color:var(--metin-ikincil)">Ziyaretçiler →</a></span>
   </header>
 
   <div class="bolum">

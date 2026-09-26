@@ -246,3 +246,50 @@ def test_hafta_ici_normal_akis():
     from dosya_utils import tarama_taze_mi
     assert tarama_taze_mi(_rt(2026, 9, 16, 11, 5), _rt(2026, 9, 16, 15, 0))
     assert tarama_taze_mi(_rt(2026, 9, 16, 18, 50), _rt(2026, 9, 17, 9, 0))
+
+
+# --- ziyaretci gunluk takibi ---
+def _bellek_db():
+    import sqlite3
+    from dosya_utils import tabloyu_hazirla
+    conn = sqlite3.connect(":memory:")
+    tabloyu_hazirla(conn)
+    return conn
+
+
+def test_bot_suzgeci():
+    from dosya_utils import bot_mu
+    assert bot_mu(None) and bot_mu("") and bot_mu("   ")
+    assert bot_mu("Mozilla/5.0 (compatible; Googlebot/2.1)")
+    assert bot_mu("facebookexternalhit/1.1")
+    assert bot_mu("curl/8.4.0") and bot_mu("python-requests/2.34")
+    assert bot_mu("Mozilla/5.0 HeadlessChrome/151.0")
+    gercek = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0 Safari/537.36"
+    assert not bot_mu(gercek)
+    assert not bot_mu("Mozilla/5.0 (Linux; Android 14; CPH1941) AppleWebKit/537.36 Chrome/151.0 Mobile Safari/537.36 Instagram 340.0")
+
+
+def test_ayni_kisi_gunde_bir_kez_sayilir():
+    from dosya_utils import ziyareti_kaydet, ziyaret_gunluk_ozeti
+    conn = _bellek_db()
+    for _ in range(5):
+        ziyareti_kaydet(conn, "2026-09-26", "kisi-a")
+    ziyareti_kaydet(conn, "2026-09-26", "kisi-b")
+    ozet = ziyaret_gunluk_ozeti(conn)
+    assert ozet["gunler"][0]["benzersiz"] == 2
+    assert ozet["toplam_benzersiz"] == 2
+
+
+def test_gun_gun_yeni_ve_tekrar():
+    from dosya_utils import ziyareti_kaydet, ziyaret_gunluk_ozeti, haric_istegi_say
+    conn = _bellek_db()
+    ziyareti_kaydet(conn, "2026-09-26", "a")
+    ziyareti_kaydet(conn, "2026-09-26", "b")
+    ziyareti_kaydet(conn, "2026-09-27", "a")            # a tekrar geldi
+    ziyareti_kaydet(conn, "2026-09-27", "c")            # c yeni
+    ziyareti_kaydet(conn, "2026-09-27", "d", eski_cerezi_vardi=True)  # eski ziyaretci, yeni sayilmaz
+    haric_istegi_say(conn, "2026-09-27"); haric_istegi_say(conn, "2026-09-27")
+    g = {x["gun"]: x for x in ziyaret_gunluk_ozeti(conn)["gunler"]}
+    assert (g["2026-09-26"]["benzersiz"], g["2026-09-26"]["yeni"], g["2026-09-26"]["tekrar"]) == (2, 2, 0)
+    assert (g["2026-09-27"]["benzersiz"], g["2026-09-27"]["yeni"], g["2026-09-27"]["tekrar"]) == (3, 1, 2)
+    assert g["2026-09-27"]["haric"] == 2
