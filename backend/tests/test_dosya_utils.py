@@ -293,3 +293,17 @@ def test_gun_gun_yeni_ve_tekrar():
     assert (g["2026-09-26"]["benzersiz"], g["2026-09-26"]["yeni"], g["2026-09-26"]["tekrar"]) == (2, 2, 0)
     assert (g["2026-09-27"]["benzersiz"], g["2026-09-27"]["yeni"], g["2026-09-27"]["tekrar"]) == (3, 1, 2)
     assert g["2026-09-27"]["haric"] == 2
+
+
+def test_ziyaret_sayaci_sifirlama_tek_seferlik():
+    import sqlite3
+    from dosya_utils import tabloyu_hazirla, yeni_ziyaretci_kaydet, ziyaretci_sayisini_oku
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE site_ziyaretleri (id INTEGER PRIMARY KEY CHECK (id = 1), toplam INTEGER NOT NULL DEFAULT 0)")
+    conn.execute("INSERT INTO site_ziyaretleri (id, toplam) VALUES (1, 133)")
+    conn.commit()
+    tabloyu_hazirla(conn)
+    assert ziyaretci_sayisini_oku(conn) == 0          # ilk baslatmada sifirlandi
+    yeni_ziyaretci_kaydet(conn); yeni_ziyaretci_kaydet(conn)
+    tabloyu_hazirla(conn)                              # ikinci baslatma
+    assert ziyaretci_sayisini_oku(conn) == 2          # tekrar SIFIRLAMADI

@@ -871,7 +871,7 @@ def ziyaret_takibi_html(ozet, haric_aktif):
     <div class="kart"><div class="et">Bugün</div><div class="deger">{bugun_deger}</div><div class="alt">benzersiz kişi</div></div>
     <div class="kart"><div class="et">Son 7 gün ort.</div><div class="deger">{ort7}</div><div class="alt">günlük</div></div>
     <div class="kart"><div class="et">Toplam (gerçek)</div><div class="deger">{ozet['toplam_benzersiz']}</div><div class="alt">{baslangic} tarihinden beri</div></div>
-    <div class="kart"><div class="et">Eski sayaç</div><div class="deger" style="color:var(--metin-ikincil)">{ozet['eski_sayac']}</div><div class="alt">bot/tekrar içerir</div></div>
+    <div class="kart"><div class="et">Sitede görünen</div><div class="deger" style="color:var(--metin-ikincil)">{ozet['eski_sayac']}</div><div class="alt">herkese açık sayaç</div></div>
   </div>
   {haric_kutusu}
   <div class="genis-kart">{tablo}</div>

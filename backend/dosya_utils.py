@@ -940,12 +940,32 @@ def tabloyu_hazirla(conn):
             PRIMARY KEY (gun, ziyaretci_id)
         )
     """)
+    # Tek seferlik islem bayraklari: bir kez yapilan veri duzeltmeleri tekrar
+    # calismasin diye (bkz. asagidaki 2026-09-26 sayac sifirlama).
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sistem_bayraklari (
+            anahtar TEXT PRIMARY KEY,
+            zaman TEXT NOT NULL
+        )
+    """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS ziyaret_haric_gunluk (
             gun TEXT PRIMARY KEY,
             sayi INTEGER NOT NULL DEFAULT 0
         )
     """)
+
+    # 2026-09-26 (kullanici istegi): eski herkese acik ziyaretci sayaci (133)
+    # bot/onizleme/kendi girisleri iceriyordu -- kullanici sifirlanmasini
+    # istedi. TEK SEFERLIK: bayrak yazildigi icin sonraki baslatmalarda
+    # sayaci bir daha sifirlamaz.
+    if not cursor.execute(
+        "SELECT 1 FROM sistem_bayraklari WHERE anahtar = 'ziyaret_sayaci_sifirlandi_2026_09_26'"
+    ).fetchone():
+        cursor.execute("UPDATE site_ziyaretleri SET toplam = 0 WHERE id = 1")
+        cursor.execute(
+            "INSERT INTO sistem_bayraklari (anahtar, zaman) VALUES ('ziyaret_sayaci_sifirlandi_2026_09_26', datetime('now'))"
+        )
 
     conn.commit()
 
