@@ -1649,7 +1649,7 @@ def admin_bildirim_teshis_gecici(_yetki=Depends(admin_girisini_dogrula)):
     }
 
 
-@app.post("/api/admin/bildirim-teslimat-testi-gecici")
+@app.get("/api/admin/bildirim-teslimat-testi-gecici")
 def admin_bildirim_teslimat_testi_gecici(_yetki=Depends(admin_girisini_dogrula)):
     """2026-09-28 GECICI TESHIS UCU (AGENTS.md deseni) -- kullanici kendisi
     de test kullanicisi ve telefonuna hic push bildirimi gelmedigini
