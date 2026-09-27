@@ -1598,6 +1598,39 @@ def admin_bildirim_teshis_gecici(_yetki=Depends(admin_girisini_dogrula)):
             "SELECT MAX(olusturma_tarihi) AS son FROM push_tokenlari"
         )
         son_token_zamani = c.fetchone()["son"]
+
+        # HIPOTEZ: bildirim SADECE ana_kategori='ordine'ye geçince gidiyor
+        # (bkz. bot.py _bildirimleri_gonder). Favorilerin kaçı GERÇEKTEN
+        # ordine'de eşleşiyor, kaçı REZULTATE/INVITATII (kuyruk-dışı, hiç
+        # bildirim tetiklemeyen) kategoride eşleşiyor?
+        c.execute(
+            """
+            SELECT COUNT(DISTINCT f.dosya_no_norm || '|' || f.yil) AS n
+            FROM favoriler f
+            JOIN dosyalar d ON d.dosya_no_norm = f.dosya_no_norm AND d.yil IS f.yil
+            WHERE d.ana_kategori = 'ordine'
+            """
+        )
+        favori_ordine_eslesen = c.fetchone()["n"]
+
+        kuyruk_disi = ["REZULTATE INTERVIU ART. 8", "INVITATII INTERVIU ART. 8",
+                        "REZULTATE INTERVIU ART. 8.1", "INVITATII INTERVIU ART. 8.1"]
+        yt = ",".join("?" * len(kuyruk_disi))
+        c.execute(
+            f"""
+            SELECT COUNT(DISTINCT f.dosya_no_norm || '|' || f.yil) AS n
+            FROM favoriler f
+            JOIN dosyalar d ON d.dosya_no_norm = f.dosya_no_norm AND d.yil IS f.yil
+            WHERE d.ana_kategori = 'stadiu' AND d.alt_kategori IN ({yt})
+            """,
+            kuyruk_disi,
+        )
+        favori_kuyruk_disi_eslesen = c.fetchone()["n"]
+
+        c.execute("SELECT COUNT(*) AS n FROM sistem_olaylari WHERE olay_tipi = 'kritik_uyari' AND zaman >= datetime('now', '-30 days')")
+        kritik_uyari_30_gun = c.fetchone()["n"]
+        c.execute("SELECT COUNT(*) AS n FROM dosyalar WHERE ana_kategori = 'ordine'")
+        toplam_ordine_kayit = c.fetchone()["n"]
     finally:
         conn.close()
     return {
@@ -1609,6 +1642,10 @@ def admin_bildirim_teshis_gecici(_yetki=Depends(admin_girisini_dogrula)):
         "favori_push_token_ile_eslesmeyen": favori_sayisi - eslesen_favori,
         "son_favori_eklenme_zamani_utc": son_favori_zamani,
         "son_push_token_kayit_zamani_utc": son_token_zamani,
+        "favori_ordine_ile_eslesen": favori_ordine_eslesen,
+        "favori_kuyruk_disi_rezultate_invitatii_ile_eslesen": favori_kuyruk_disi_eslesen,
+        "kritik_uyari_olayi_son_30_gun": kritik_uyari_30_gun,
+        "toplam_ordine_kayit_sayisi_db": toplam_ordine_kayit,
     }
 
 
