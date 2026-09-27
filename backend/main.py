@@ -1567,7 +1567,7 @@ def admin_olay_gunlugu(
 
 
 @app.get("/api/admin/bildirim-teshis-gecici")
-def admin_bildirim_teshis_gecici(_yetki=Depends(nobetci_anahtarini_dogrula)):
+def admin_bildirim_teshis_gecici(_yetki=Depends(admin_girisini_dogrula)):
     """2026-09-27 GECICI TESHIS UCU (AGENTS.md deseni) -- test kullanicisi
     "dosya numaram aciklaninca bildirim gelmiyor" dedi. Sadece toplu/agregat
     sayilar donduruyor, hicbir kisisel veri (dosya no, token degeri) yok.
