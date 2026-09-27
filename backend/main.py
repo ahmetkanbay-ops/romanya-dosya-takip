@@ -1649,6 +1649,108 @@ def admin_bildirim_teshis_gecici(_yetki=Depends(admin_girisini_dogrula)):
     }
 
 
+@app.post("/api/admin/bildirim-teslimat-testi-gecici")
+def admin_bildirim_teslimat_testi_gecici(_yetki=Depends(admin_girisini_dogrula)):
+    """2026-09-28 GECICI TESHIS UCU (AGENTS.md deseni) -- kullanici kendisi
+    de test kullanicisi ve telefonuna hic push bildirimi gelmedigini
+    soyledi (admin/Telegram kanallari calisiyor, bu ayri). expo_push_gonder
+    fonksiyonu (bildirim.py) Expo'nun "ticket" yanitini (bize "kuyruga
+    aldim" der) kontrol ediyor ama "receipt" (Expo'dan telefona GERCEKTEN
+    ulasti mi) hic sorgulanmiyor -- bu HIPOTEZI test etmek icin tum kayitli
+    cihazlara gercek bir test bildirimi gonderip Expo'nun receipt API'sini
+    sorguluyor. Kanit toplaninca bu uc KALDIRILACAK."""
+    conn = veritabani_baglantisi(DB_FILE, row_factory=sqlite3.Row)
+    try:
+        c = conn.cursor()
+        c.execute("SELECT expo_push_token FROM push_tokenlari")
+        tokenlar = [r["expo_push_token"] for r in c.fetchall()]
+    finally:
+        conn.close()
+
+    if not tokenlar:
+        return {"hata": "Kayitli push token yok"}
+
+    ticket_id_to_token = {}
+    ticket_hatalari = []
+    for i in range(0, len(tokenlar), 100):
+        parca = tokenlar[i:i + 100]
+        mesajlar = [
+            {
+                "to": token,
+                "title": "Sistem testi",
+                "body": "Bu bir teslimat testidir, yok sayabilirsiniz.",
+                "data": {"tur": "teshis_testi"},
+            }
+            for token in parca
+        ]
+        try:
+            yanit = requests.post(
+                "https://exp.host/--/api/v2/push/send",
+                json=mesajlar,
+                timeout=15,
+                headers={"Content-Type": "application/json", "Accept": "application/json"},
+            )
+            sonuclar = yanit.json().get("data", [])
+            for token, sonuc in zip(parca, sonuclar):
+                if not isinstance(sonuc, dict):
+                    ticket_hatalari.append({"token_son6": token[-6:], "yanit": str(sonuc)[:200]})
+                    continue
+                if sonuc.get("status") == "ok" and sonuc.get("id"):
+                    ticket_id_to_token[sonuc["id"]] = token[-6:]
+                else:
+                    ticket_hatalari.append({"token_son6": token[-6:], "yanit": sonuc})
+        except Exception as e:
+            ticket_hatalari.append({"parca_hatasi": str(e)[:200]})
+
+    if not ticket_id_to_token:
+        return {
+            "asama": "gonderim (ticket)",
+            "sonuc": "TUM gonderimler ticket asamasinda hata verdi",
+            "ticket_hatalari": ticket_hatalari,
+            "toplam_token": len(tokenlar),
+        }
+
+    time.sleep(12)  # Expo'nun receipt'leri hazirlamasi icin kisa bekleme
+
+    receipt_sonuclari = {"ok": 0, "error": []}
+    ticket_id_listesi = list(ticket_id_to_token.keys())
+    for i in range(0, len(ticket_id_listesi), 300):
+        parca_id = ticket_id_listesi[i:i + 300]
+        try:
+            yanit = requests.post(
+                "https://exp.host/--/api/v2/push/getReceipts",
+                json={"ids": parca_id},
+                timeout=15,
+                headers={"Content-Type": "application/json", "Accept": "application/json"},
+            )
+            receiptler = yanit.json().get("data", {})
+            for rid in parca_id:
+                r = receiptler.get(rid)
+                if r is None:
+                    receipt_sonuclari["error"].append({
+                        "token_son6": ticket_id_to_token.get(rid),
+                        "durum": "receipt henuz yok (Expo hala isliyor olabilir)",
+                    })
+                elif r.get("status") == "ok":
+                    receipt_sonuclari["ok"] += 1
+                else:
+                    receipt_sonuclari["error"].append({
+                        "token_son6": ticket_id_to_token.get(rid),
+                        "hata": r.get("message"),
+                        "detay": r.get("details"),
+                    })
+        except Exception as e:
+            receipt_sonuclari["error"].append({"parca_hatasi": str(e)[:200]})
+
+    return {
+        "toplam_token": len(tokenlar),
+        "ticket_asamasinda_basarili": len(ticket_id_to_token),
+        "ticket_hatalari": ticket_hatalari,
+        "receipt_basarili_ok": receipt_sonuclari["ok"],
+        "receipt_hatalari": receipt_sonuclari["error"],
+    }
+
+
 _NOBETCI_DURUM_IKONU = {"iyi": "✅", "uyari": "🚨", "hata": "🚨", "yok": "ℹ️"}
 
 
