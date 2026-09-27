@@ -1566,6 +1566,52 @@ def admin_olay_gunlugu(
     return {"toplam": len(olaylar), "olaylar": olaylar}
 
 
+@app.get("/api/admin/bildirim-teshis-gecici")
+def admin_bildirim_teshis_gecici(_yetki=Depends(nobetci_anahtarini_dogrula)):
+    """2026-09-27 GECICI TESHIS UCU (AGENTS.md deseni) -- test kullanicisi
+    "dosya numaram aciklaninca bildirim gelmiyor" dedi. Sadece toplu/agregat
+    sayilar donduruyor, hicbir kisisel veri (dosya no, token degeri) yok.
+    Kanit toplaninca bu uc KALDIRILACAK."""
+    conn = veritabani_baglantisi(DB_FILE, row_factory=sqlite3.Row)
+    try:
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) AS n FROM push_tokenlari")
+        push_token_sayisi = c.fetchone()["n"]
+        c.execute("SELECT COUNT(*) AS n FROM favoriler")
+        favori_sayisi = c.fetchone()["n"]
+        c.execute("SELECT COUNT(*) AS n FROM favoriler WHERE otomatik_mi = 1")
+        favori_otomatik = c.fetchone()["n"]
+        c.execute("SELECT COUNT(*) AS n FROM favoriler WHERE otomatik_mi = 0")
+        favori_manuel = c.fetchone()["n"]
+        c.execute(
+            """
+            SELECT COUNT(*) AS n FROM favoriler f
+            JOIN push_tokenlari pt ON pt.cihaz_kimligi = f.expo_push_token
+            """
+        )
+        eslesen_favori = c.fetchone()["n"]
+        c.execute(
+            "SELECT MAX(olusturma_tarihi) AS son FROM favoriler"
+        )
+        son_favori_zamani = c.fetchone()["son"]
+        c.execute(
+            "SELECT MAX(olusturma_tarihi) AS son FROM push_tokenlari"
+        )
+        son_token_zamani = c.fetchone()["son"]
+    finally:
+        conn.close()
+    return {
+        "push_token_sayisi": push_token_sayisi,
+        "favori_sayisi": favori_sayisi,
+        "favori_otomatik": favori_otomatik,
+        "favori_manuel": favori_manuel,
+        "favori_push_token_ile_eslesen": eslesen_favori,
+        "favori_push_token_ile_eslesmeyen": favori_sayisi - eslesen_favori,
+        "son_favori_eklenme_zamani_utc": son_favori_zamani,
+        "son_push_token_kayit_zamani_utc": son_token_zamani,
+    }
+
+
 _NOBETCI_DURUM_IKONU = {"iyi": "✅", "uyari": "🚨", "hata": "🚨", "yok": "ℹ️"}
 
 
