@@ -1690,7 +1690,20 @@ def admin_bildirim_teslimat_testi_gecici(_yetki=Depends(admin_girisini_dogrula))
                 timeout=15,
                 headers={"Content-Type": "application/json", "Accept": "application/json"},
             )
-            sonuclar = yanit.json().get("data", [])
+            try:
+                govde = yanit.json()
+            except Exception:
+                govde = None
+            sonuclar = (govde or {}).get("data", []) if isinstance(govde, dict) else []
+            if isinstance(sonuclar, dict):
+                sonuclar = [sonuclar]
+            if len(sonuclar) != len(parca):
+                ticket_hatalari.append({
+                    "parca_boyutu": len(parca),
+                    "http_durum": yanit.status_code,
+                    "content_type": yanit.headers.get("Content-Type"),
+                    "ham_yanit_ilk_500": yanit.text[:500],
+                })
             for token, sonuc in zip(parca, sonuclar):
                 if not isinstance(sonuc, dict):
                     ticket_hatalari.append({"token_son6": token[-6:], "yanit": str(sonuc)[:200]})
