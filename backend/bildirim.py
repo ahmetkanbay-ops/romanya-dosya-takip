@@ -21,6 +21,8 @@ import requests
 
 from dosya_utils import veritabani_baglantisi, sistem_olayi_kaydet
 
+EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts"
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # 2026-08-19 (Render'a taşıma): bkz. main.py'deki aynı isimli sabitin notu.
 VERI_DIZINI = os.environ.get("DATA_DIR", BASE_DIR)
@@ -105,8 +107,10 @@ def _olu_tokenlari_sil(tokenlar):
 
 
 def _expo_parca_gonder(parca, baslik, govde, veri):
-    """Tek bir parça (<=100 token) icin Expo'ya istek atar, (basarili_id_sayisi,
+    """Tek bir parça (<=100 token) icin Expo'ya istek atar, (ticket_map,
     olu_tokenlar, yanlis_proje_tokenlar, tekrar_denenecek_parca) dondurur.
+    ticket_map: {ticket_id: token} -- basarili kuyruga alinanlar (henuz
+    telefona ULASTIGI anlamina gelmez, bkz. receiptleri_kontrol_et).
     tekrar_denenecek_parca dolu ise cagiran taraf onu (yanlis-proje token'lari
     cikarilmis halde) tekrar bu fonksiyona vermeli."""
     mesajlar = [
@@ -122,13 +126,13 @@ def _expo_parca_gonder(parca, baslik, govde, veri):
         )
     except Exception as e:
         print(f"✗ Expo push gonderim hatasi (ag): {str(e)[:80]}")
-        return 0, [], [], []
+        return {}, [], [], []
 
     try:
         govde_json = yanit.json()
     except Exception:
         print(f"✗ Expo push yaniti JSON degil (HTTP {yanit.status_code}): {yanit.text[:200]}")
-        return 0, [], [], []
+        return {}, [], [], []
 
     # 2026-09-28 DUZELTMESI: eskiden yanit gövdesi hic dogrulanmadan
     # "basarili" sayiliyordu -- Expo bir istegin TUMUNU HTTP 400 ile
@@ -151,29 +155,48 @@ def _expo_parca_gonder(parca, baslik, govde, veri):
                         f"(beklenen: {EXPO_PROJE_KIMLIGI}), ayiklaniyor."
                     )
                     kalan = [t for t in parca if t not in yanlis_proje]
-                    return 0, [], yanlis_proje, kalan
+                    return {}, [], yanlis_proje, kalan
             print(f"✗ Expo push toplu hata: {hata.get('code')} -- {str(hata.get('message'))[:150]}")
-        return 0, [], [], []
+        return {}, [], [], []
 
     sonuclar = govde_json.get("data", []) if isinstance(govde_json, dict) else []
     if isinstance(sonuclar, dict):
         sonuclar = [sonuclar]
     if len(sonuclar) != len(parca):
         print(f"✗ Expo push yaniti beklenmeyen formatta (HTTP {yanit.status_code}): {yanit.text[:200]}")
-        return 0, [], [], []
+        return {}, [], [], []
 
-    basarili = 0
+    ticket_map = {}
     olu_tokenlar = []
     for token, sonuc in zip(parca, sonuclar):
         if not isinstance(sonuc, dict):
             continue
-        if sonuc.get("status") == "ok":
-            basarili += 1
+        if sonuc.get("status") == "ok" and sonuc.get("id"):
+            ticket_map[sonuc["id"]] = token
         elif sonuc.get("details", {}).get("error") == "DeviceNotRegistered":
             olu_tokenlar.append(token)
         else:
             print(f"✗ Expo push token hatasi: {sonuc.get('message')}")
-    return basarili, olu_tokenlar, [], []
+    return ticket_map, olu_tokenlar, [], []
+
+
+def _ticketleri_kaydet(ticket_map):
+    """Basariyla kuyruga alinan ticket'lari bekleyen_push_receiptleri'ne
+    yazar -- receiptleri_kontrol_et() birkac dakika sonra bunlari
+    sorgulayip GERCEKTEN telefona ulasmayanlari (DeviceNotRegistered)
+    temizleyecek."""
+    if not ticket_map:
+        return
+    try:
+        conn = veritabani_baglantisi(DB_FILE)
+        conn.executemany(
+            "INSERT OR IGNORE INTO bekleyen_push_receiptleri (ticket_id, expo_push_token) VALUES (?, ?)",
+            [(tid, token) for tid, token in ticket_map.items()],
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"✗ Ticket kaydi basarisiz: {str(e)[:80]}")
 
 
 def expo_push_gonder(tokenlar, baslik, govde, veri=None):
@@ -189,27 +212,103 @@ def expo_push_gonder(tokenlar, baslik, govde, veri=None):
     basarili_sayisi = 0
     olu_tokenlar = []
     yanlis_proje_tokenlar = []
+    tum_ticketler = {}
     for i in range(0, len(tokenlar), 100):
         parca = tokenlar[i:i + 100]
-        basarili, olu, yanlis_proje, kalan = _expo_parca_gonder(parca, baslik, govde, veri)
-        basarili_sayisi += basarili
+        ticketler, olu, yanlis_proje, kalan = _expo_parca_gonder(parca, baslik, govde, veri)
+        basarili_sayisi += len(ticketler)
+        tum_ticketler.update(ticketler)
         olu_tokenlar.extend(olu)
         yanlis_proje_tokenlar.extend(yanlis_proje)
         if kalan:
             # Yanlis-proje token'lari ayiklandi, geri kalanlarla bir kez
             # daha dene (artik tek proje kaldigi icin basarili olmali).
-            basarili2, olu2, _, _ = _expo_parca_gonder(kalan, baslik, govde, veri)
-            basarili_sayisi += basarili2
+            ticketler2, olu2, _, _ = _expo_parca_gonder(kalan, baslik, govde, veri)
+            basarili_sayisi += len(ticketler2)
+            tum_ticketler.update(ticketler2)
             olu_tokenlar.extend(olu2)
 
     if basarili_sayisi:
         _olay_kaydet_sessizce(
             "push_gonderildi", f"{basarili_sayisi} cihaza gönderildi: \"{baslik}\""
         )
+    if tum_ticketler:
+        _ticketleri_kaydet(tum_ticketler)
     if olu_tokenlar:
         _olu_tokenlari_sil(olu_tokenlar)
     if yanlis_proje_tokenlar:
         _yanlis_proje_tokenlarini_sil(yanlis_proje_tokenlar)
+
+
+def receiptleri_kontrol_et():
+    """2026-09-28 EKLENTISI: expo_push_gonder'in kuyruga aldigi ("ticket")
+    ama telefona GERCEKTEN ulasip ulasmadigi henuz bilinmeyen gonderimleri
+    kontrol eder. En az 2 dakika bekletilmis kayitlari Expo'nun receipt
+    API'sinden sorgular:
+      - "DeviceNotRegistered" -> uygulamayi silmis kullanicinin token'i,
+        push_tokenlari'ndan kalici silinir (admin panelindeki "Toplam
+        cihaz" sayisi boylece GERCEK aktif kullanici sayisini yansitir).
+      - 24 saatten eski, hala cevapsiz kayitlar -- Expo bir daha
+        cevap vermeyecek kabul edilip birikmesin diye silinir.
+    main.py'deki zamanlayicidan periyodik cagrilir."""
+    conn = veritabani_baglantisi(DB_FILE)
+    try:
+        c = conn.cursor()
+        c.execute(
+            """
+            SELECT ticket_id, expo_push_token FROM bekleyen_push_receiptleri
+            WHERE gonderim_zamani <= datetime('now', '-2 minutes')
+            LIMIT 900
+            """
+        )
+        bekleyenler = c.fetchall()
+        c.execute(
+            "DELETE FROM bekleyen_push_receiptleri WHERE gonderim_zamani <= datetime('now', '-1 day')"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    if not bekleyenler:
+        return
+
+    ticket_to_token = {tid: token for tid, token in bekleyenler}
+    olu_tokenlar = []
+    islenen_ticketler = []
+    ticket_id_listesi = list(ticket_to_token.keys())
+    for i in range(0, len(ticket_id_listesi), 300):
+        parca_id = ticket_id_listesi[i:i + 300]
+        try:
+            yanit = requests.post(
+                EXPO_RECEIPTS_URL,
+                json={"ids": parca_id},
+                timeout=15,
+                headers={"Content-Type": "application/json", "Accept": "application/json"},
+            )
+            receiptler = yanit.json().get("data", {})
+        except Exception as e:
+            print(f"✗ Expo receipt sorgusu basarisiz: {str(e)[:80]}")
+            continue
+        for rid in parca_id:
+            r = receiptler.get(rid)
+            if r is None:
+                continue  # Expo henuz islemedi, bir sonraki turda tekrar denenir
+            islenen_ticketler.append(rid)
+            if isinstance(r, dict) and r.get("details", {}).get("error") == "DeviceNotRegistered":
+                olu_tokenlar.append(ticket_to_token[rid])
+
+    if islenen_ticketler:
+        conn = veritabani_baglantisi(DB_FILE)
+        try:
+            conn.executemany(
+                "DELETE FROM bekleyen_push_receiptleri WHERE ticket_id = ?",
+                [(tid,) for tid in islenen_ticketler],
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    if olu_tokenlar:
+        _olu_tokenlari_sil(olu_tokenlar)
 
 
 def telegram_gonder(mesaj):

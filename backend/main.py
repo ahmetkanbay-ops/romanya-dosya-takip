@@ -777,6 +777,20 @@ def disk_kotasi_kontrol_et():
         print(f"✗ Disk kotası kontrolü hatası: {e}")
 
 
+def push_receiptlerini_kontrol_et_job():
+    """2026-09-28 EKLENTISI: expo_push_gonder'in kuyruga aldigi ama
+    telefona GERCEKTEN ulasip ulasmadigi bilinmeyen gonderimleri (bkz.
+    push-bildirimi-hic-gitmiyordu kok neden duzeltmesi) periyodik olarak
+    Expo'nun receipt API'siyle dogrular, uygulamayi silmis kullanicilarin
+    olu token'larini temizler -- boylece admin panelindeki "Toplam cihaz"
+    sayisi GERCEK aktif kullanici sayisini yansitir."""
+    try:
+        from bildirim import receiptleri_kontrol_et  # lazy import, bkz. veritabani_yedekle() notu
+        receiptleri_kontrol_et()
+    except Exception as e:
+        print(f"✗ Push receipt kontrolü hatası: {e}")
+
+
 # 2026-08-18: eski @app.on_event("startup"/"shutdown") -- FastAPI'de
 # deprecated, ileride tamamen kaldırılacak (bkz. DeprecationWarning).
 # Yerine önerilen "lifespan" context manager kullanılıyor. ÖNEMLİ: bu
@@ -872,6 +886,18 @@ async def lifespan(_app: FastAPI):
         minute='0',
         id='disk_kota_kontrolu',
         name='Disk Kotası Kontrolü'
+    )
+    # 2026-09-28: push receipt kontrolü -- Expo'ya gönderilen ticket'ların
+    # gerçekten telefona ulaşıp ulaşmadığını birkaç dakika sonra sorgular
+    # (bkz. bildirim.py receiptleri_kontrol_et). 15 dakikada bir yeterli,
+    # gönderimler günde sadece 2 kez (11:00/18:45) olduğu için sık olmasına
+    # gerek yok.
+    scheduler.add_job(
+        push_receiptlerini_kontrol_et_job,
+        'interval',
+        minutes=15,
+        id='push_receipt_kontrolu',
+        name='Push Receipt Kontrolü'
     )
     scheduler.start()
     print(f"\n✓ Scheduler başlatıldı!")

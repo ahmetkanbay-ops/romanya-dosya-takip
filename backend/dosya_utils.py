@@ -702,6 +702,24 @@ def tabloyu_hazirla(conn):
         cursor.execute("ALTER TABLE push_tokenlari ADD COLUMN cihaz_kimligi TEXT")
         print("! 'push_tokenlari' tablosuna 'cihaz_kimligi' kolonu eklendi (mevcut veri korunuyor).")
 
+    # 2026-09-28 EKLENTİSİ: Expo'nun push API'si iki aşamalı -- "ticket"
+    # (bize hemen "kuyruğa aldım" der) ve "receipt" (birkaç dakika sonra
+    # sorgulanabilen, telefona GERÇEKTEN ulaştı mı bilgisi). Uzun süre
+    # genel yayın gönderimi HTTP 400 ile toptan reddedildiği için (bkz.
+    # PUSH_TOO_MANY_EXPERIENCE_IDS kök neden düzeltmesi) "DeviceNotRegistered"
+    # temizliği hiç çalışamamıştı -- uygulamayı silen kullanıcıların ölü
+    # token'ları push_tokenlari'nde birikmiş olabilir. Bu tablo gönderilen
+    # ticket'ları geçici olarak tutar, birkaç dakika sonra receipt'leri
+    # sorgulanıp gerçekten ölü olanlar temizlenir (bkz. bildirim.py
+    # receiptleri_kontrol_et).
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS bekleyen_push_receiptleri (
+            ticket_id TEXT PRIMARY KEY,
+            expo_push_token TEXT NOT NULL,
+            gonderim_zamani TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     # ÖNEMLİ (2026-08-16 -- kullanıcı testinde bulunan hata): önceden
     # favoriler SADECE dosya_no_norm (çıplak rakam) ile kaydediliyordu --
     # kullanıcının favorilediği KARTIN hangi yıla ait olduğu unutuluyordu.
