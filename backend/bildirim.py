@@ -58,6 +58,30 @@ ADMIN_EPOSTA = os.environ.get("ADMIN_EPOSTA")
 
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 
+# app.json'daki owner+slug -- Expo'nun her push isteginde TUM token'larin
+# AYNI projeye ait olmasini zorunlu kilmasi yuzunden (bkz. asagidaki
+# PUSH_TOO_MANY_EXPERIENCE_IDS notu) gerekli.
+EXPO_PROJE_KIMLIGI = "@kanbays-team/romanya-dosya-takip"
+
+
+def _yanlis_proje_tokenlarini_sil(tokenlar):
+    """2026-09-28 EKLENTISI -- bkz. expo_push_gonder'daki
+    PUSH_TOO_MANY_EXPERIENCE_IDS notu. Baska bir Expo projesine ait,
+    bu uygulamada ASLA calismayacak token'lari kalici siler."""
+    if not tokenlar:
+        return
+    try:
+        conn = veritabani_baglantisi(DB_FILE)
+        conn.executemany(
+            "DELETE FROM push_tokenlari WHERE expo_push_token = ?",
+            [(t,) for t in tokenlar],
+        )
+        conn.commit()
+        conn.close()
+        print(f"✓ {len(tokenlar)} yanlis-proje token temizlendi.")
+    except Exception as e:
+        print(f"✗ Yanlis-proje token temizligi basarisiz: {str(e)[:80]}")
+
 
 def _olu_tokenlari_sil(tokenlar):
     """2026-09-02 EKLENTİSİ (kullanıcı fark etti -- admin panelindeki
@@ -80,20 +104,83 @@ def _olu_tokenlari_sil(tokenlar):
         print(f"✗ Ölü token temizliği başarısız: {str(e)[:80]}")
 
 
+def _expo_parca_gonder(parca, baslik, govde, veri):
+    """Tek bir parça (<=100 token) icin Expo'ya istek atar, (basarili_id_sayisi,
+    olu_tokenlar, yanlis_proje_tokenlar, tekrar_denenecek_parca) dondurur.
+    tekrar_denenecek_parca dolu ise cagiran taraf onu (yanlis-proje token'lari
+    cikarilmis halde) tekrar bu fonksiyona vermeli."""
+    mesajlar = [
+        {"to": token, "title": baslik, "body": govde, "data": veri or {}}
+        for token in parca
+    ]
+    try:
+        yanit = requests.post(
+            EXPO_PUSH_URL,
+            json=mesajlar,
+            timeout=15,
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+        )
+    except Exception as e:
+        print(f"✗ Expo push gonderim hatasi (ag): {str(e)[:80]}")
+        return 0, [], [], []
+
+    try:
+        govde_json = yanit.json()
+    except Exception:
+        print(f"✗ Expo push yaniti JSON degil (HTTP {yanit.status_code}): {yanit.text[:200]}")
+        return 0, [], [], []
+
+    # 2026-09-28 DUZELTMESI: eskiden yanit gövdesi hic dogrulanmadan
+    # "basarili" sayiliyordu -- Expo bir istegin TUMUNU HTTP 400 ile
+    # reddedebiliyor (ornegin "PUSH_TOO_MANY_EXPERIENCE_IDS": ayni
+    # istekte birden fazla Expo projesine ait token varsa). Bu durumda
+    # eskiden hicbir sey fark edilmiyor, push_gonderildi olayi yine de
+    # kaydediliyordu -- gercekte Expo hicbir mesaji kuyruga almiyordu.
+    hatalar = govde_json.get("errors") if isinstance(govde_json, dict) else None
+    if hatalar:
+        for hata in hatalar:
+            if hata.get("code") == "PUSH_TOO_MANY_EXPERIENCE_IDS":
+                detay = hata.get("details", {}) or {}
+                yanlis_proje = []
+                for proje_kimligi, proje_tokenlari in detay.items():
+                    if proje_kimligi != EXPO_PROJE_KIMLIGI:
+                        yanlis_proje.extend(proje_tokenlari)
+                if yanlis_proje:
+                    print(
+                        f"✗ {len(yanlis_proje)} token yanlis Expo projesine ait "
+                        f"(beklenen: {EXPO_PROJE_KIMLIGI}), ayiklaniyor."
+                    )
+                    kalan = [t for t in parca if t not in yanlis_proje]
+                    return 0, [], yanlis_proje, kalan
+            print(f"✗ Expo push toplu hata: {hata.get('code')} -- {str(hata.get('message'))[:150]}")
+        return 0, [], [], []
+
+    sonuclar = govde_json.get("data", []) if isinstance(govde_json, dict) else []
+    if isinstance(sonuclar, dict):
+        sonuclar = [sonuclar]
+    if len(sonuclar) != len(parca):
+        print(f"✗ Expo push yaniti beklenmeyen formatta (HTTP {yanit.status_code}): {yanit.text[:200]}")
+        return 0, [], [], []
+
+    basarili = 0
+    olu_tokenlar = []
+    for token, sonuc in zip(parca, sonuclar):
+        if not isinstance(sonuc, dict):
+            continue
+        if sonuc.get("status") == "ok":
+            basarili += 1
+        elif sonuc.get("details", {}).get("error") == "DeviceNotRegistered":
+            olu_tokenlar.append(token)
+        else:
+            print(f"✗ Expo push token hatasi: {sonuc.get('message')}")
+    return basarili, olu_tokenlar, [], []
+
+
 def expo_push_gonder(tokenlar, baslik, govde, veri=None):
     """
     tokenlar: 'ExponentPushToken[...]' formatında token listesi.
     Expo API tek istekte en fazla 100 mesaj kabul eder, otomatik olarak
     100'erli parçalara bölünür.
-
-    2026-09-02 DÜZELTMESİ: öncesinde Expo'nun yanıtı HİÇ okunmuyordu --
-    istek atılıp exception fırlamazsa "başarılı" sayılıyordu. Ama Expo
-    200 OK dönüp içinde "status":"error","details":{"error":
-    "DeviceNotRegistered"} taşıyan bir gövde de döndürebilir (token
-    artık geçerli değil, uygulama silinmiş olabilir) -- bu HİÇBİR ZAMAN
-    yakalanmıyordu, ölü token'lar veritabanında sonsuza kadar birikiyordu
-    (admin panelindeki "Toplam cihaz" sayısını gerçek kullanıcı sayısından
-    fazla gösteriyordu, kullanıcı bunu canlı testte fark etti).
     """
     tokenlar = [t for t in (tokenlar or []) if t]
     if not tokenlar:
@@ -101,35 +188,19 @@ def expo_push_gonder(tokenlar, baslik, govde, veri=None):
 
     basarili_sayisi = 0
     olu_tokenlar = []
+    yanlis_proje_tokenlar = []
     for i in range(0, len(tokenlar), 100):
         parca = tokenlar[i:i + 100]
-        mesajlar = [
-            {"to": token, "title": baslik, "body": govde, "data": veri or {}}
-            for token in parca
-        ]
-        try:
-            yanit = requests.post(
-                EXPO_PUSH_URL,
-                json=mesajlar,
-                timeout=15,
-                headers={"Content-Type": "application/json", "Accept": "application/json"},
-            )
-            basarili_sayisi += len(parca)
-            try:
-                sonuclar = yanit.json().get("data", [])
-                for token, sonuc in zip(parca, sonuclar):
-                    if (
-                        isinstance(sonuc, dict)
-                        and sonuc.get("status") == "error"
-                        and sonuc.get("details", {}).get("error") == "DeviceNotRegistered"
-                    ):
-                        olu_tokenlar.append(token)
-            except Exception:
-                # Yanıt gövdesi beklenmedik formatta olsa bile gönderim
-                # kendisi zaten yapıldı -- sadece temizlik atlanır.
-                pass
-        except Exception as e:
-            print(f"✗ Expo push gönderim hatası: {str(e)[:80]}")
+        basarili, olu, yanlis_proje, kalan = _expo_parca_gonder(parca, baslik, govde, veri)
+        basarili_sayisi += basarili
+        olu_tokenlar.extend(olu)
+        yanlis_proje_tokenlar.extend(yanlis_proje)
+        if kalan:
+            # Yanlis-proje token'lari ayiklandi, geri kalanlarla bir kez
+            # daha dene (artik tek proje kaldigi icin basarili olmali).
+            basarili2, olu2, _, _ = _expo_parca_gonder(kalan, baslik, govde, veri)
+            basarili_sayisi += basarili2
+            olu_tokenlar.extend(olu2)
 
     if basarili_sayisi:
         _olay_kaydet_sessizce(
@@ -137,6 +208,8 @@ def expo_push_gonder(tokenlar, baslik, govde, veri=None):
         )
     if olu_tokenlar:
         _olu_tokenlari_sil(olu_tokenlar)
+    if yanlis_proje_tokenlar:
+        _yanlis_proje_tokenlarini_sil(yanlis_proje_tokenlar)
 
 
 def telegram_gonder(mesaj):
