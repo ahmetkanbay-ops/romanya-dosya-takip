@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -75,11 +75,23 @@ export default function IstatistiklerEkrani() {
   const [kisiselSonuc, setKisiselSonuc] = useState<any | null>(null);
   const [kategoriSecenekleri, setKategoriSecenekleri] = useState<string[] | null>(null);
 
+  // 2026-09-29 DÜZELTMESİ (kullanıcı canlı testte yakaladı): kategori
+  // seçim adımından sonra "Görüntüle"ye tekrar basılıp farklı bir
+  // dosya/yıl aranırsa, ÖNCEKİ (yavaş) istek ağdan SONRADAN dönebiliyordu
+  // -- cevaplar isteklerin gönderilme sırasına göre değil, ağdan dönme
+  // sırasına göre geliyor. Eski, ilgisiz bir "bulunamadı" cevabı YENİ
+  // sonucu ezip ekranı yanlış gösterebiliyordu (ör. REZULTATE INTERVIU
+  // ART. 8 için "bu liste kuyruk değil" yerine yanlışlıkla "bulunamadı"
+  // görünmesi). Basit bir istek-sırası sayacıyla SADECE en son gönderilen
+  // isteğin cevabı state'e yazılıyor artık.
+  const istekSirasiRef = useRef(0);
+
   const kisiselSorgula = async (secilenAltKategori?: string) => {
     if (!dosyaNo.trim() || !yil.trim()) {
       setKisiselHata(t.istatistikKisiselEksikAlan);
       return;
     }
+    const buIstekNo = ++istekSirasiRef.current;
     setKisiselHata('');
     setKisiselYukleniyor(true);
     setKisiselSonuc(null);
@@ -94,15 +106,22 @@ export default function IstatistiklerEkrani() {
         body: JSON.stringify(istekGovdesi),
       });
       const data = await response.json();
+      if (buIstekNo !== istekSirasiRef.current) {
+        return; // Bu istek artık güncel değil -- daha yeni bir istek gönderilmiş, bu cevap yok sayılıyor.
+      }
       if (data.durum === 'kategori_secilmeli') {
         setKategoriSecenekleri(data.secenekler || []);
       } else {
         setKisiselSonuc(data);
       }
     } catch {
-      setKisiselHata(t.hataBaglanti);
+      if (buIstekNo === istekSirasiRef.current) {
+        setKisiselHata(t.hataBaglanti);
+      }
     } finally {
-      setKisiselYukleniyor(false);
+      if (buIstekNo === istekSirasiRef.current) {
+        setKisiselYukleniyor(false);
+      }
     }
   };
 

@@ -1592,68 +1592,6 @@ def admin_olay_gunlugu(
     return {"toplam": len(olaylar), "olaylar": olaylar}
 
 
-@app.get("/api/admin/sira-tahmini-teshis-gecici")
-def admin_sira_tahmini_teshis_gecici(dosya_no: str, yil: str, _yetki=Depends(admin_girisini_dogrula)):
-    """2026-09-29 GECICI TESHIS UCU (AGENTS.md deseni) -- kullanici
-    istatistikler ekraninda ayni dosya icin bazen "bulunamadi" bazen
-    "kuyruk_disi" gibi tutarsiz sonuclar aldigini bildirdi (21777/2024,
-    10194/2022). /api/sira-tahmini'nin TAM AYNI mantigini calistirip her
-    adimdaki ara degerleri (DISTINCT alt_kategori listesi, her birinin
-    _BEKLEME_KUYRUGU_ALT_KATEGORILERI icinde olup olmadigi, ham repr())
-    donduruyor. Kanit toplaninca KALDIRILACAK."""
-    dosya_no_norm = sayisal_cekirdek(dosya_no)
-    yil = yil.strip()
-    conn = veritabani_baglantisi(DB_FILE, row_factory=sqlite3.Row)
-    try:
-        c = conn.cursor()
-        c.execute(
-            "SELECT COUNT(*) FROM dosyalar WHERE ana_kategori='ordine' AND dosya_no_norm=? AND yil=?",
-            (dosya_no_norm, yil),
-        )
-        onaylanmis_mi = c.fetchone()[0] > 0
-
-        c.execute(
-            "SELECT DISTINCT alt_kategori FROM dosyalar WHERE ana_kategori='stadiu' AND dosya_no_norm=? AND yil=?",
-            (dosya_no_norm, yil),
-        )
-        eslesen_kategoriler = [row[0] for row in c.fetchall()]
-
-        detaylar = []
-        for kat in eslesen_kategoriler:
-            kuyrukta_mi = kat in _BEKLEME_KUYRUGU_ALT_KATEGORILERI
-            sonuc = None
-            if kuyrukta_mi:
-                sonuc = sira_tahmini_hesapla(conn, dosya_no_norm, yil, kat)
-            c.execute(
-                "SELECT COUNT(*) FROM dosyalar WHERE ana_kategori='stadiu' AND dosya_no_norm=? AND yil=? AND alt_kategori=?",
-                (dosya_no_norm, yil, kat),
-            )
-            satir_sayisi = c.fetchone()[0]
-            c.execute(
-                "SELECT COUNT(*) FROM bekleyen_dosyalar WHERE dosya_no_norm=? AND yil=? AND alt_kategori=?",
-                (dosya_no_norm, yil, kat),
-            )
-            kuyruk_tablosunda_mi = c.fetchone()[0] > 0
-            detaylar.append({
-                "alt_kategori_repr": repr(kat),
-                "bekleme_kuyrugu_listesinde_mi": kuyrukta_mi,
-                "dosyalar_tablosunda_satir_sayisi": satir_sayisi,
-                "bekleyen_dosyalar_tablosunda_mi": kuyruk_tablosunda_mi,
-                "sira_tahmini_hesapla_sonucu": sonuc,
-            })
-    finally:
-        conn.close()
-
-    return {
-        "dosya_no_norm": dosya_no_norm,
-        "yil": yil,
-        "onaylanmis_mi": onaylanmis_mi,
-        "eslesen_kategori_sayisi": len(eslesen_kategoriler),
-        "detaylar": detaylar,
-        "bekleme_kuyrugu_alt_kategorileri_repr": [repr(k) for k in _BEKLEME_KUYRUGU_ALT_KATEGORILERI],
-    }
-
-
 _NOBETCI_DURUM_IKONU = {"iyi": "✅", "uyari": "🚨", "hata": "🚨", "yok": "ℹ️"}
 
 
