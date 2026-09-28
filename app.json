@@ -17,7 +17,7 @@
     },
     "android": {
       "package": "com.knby.romanyadosyatakip",
-      "versionCode": 5,
+      "versionCode": 6,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#10182B",
