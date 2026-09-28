@@ -1303,5 +1303,44 @@ def botu_calistir():
     return toplam_pdf_bulunan
 
 
+# 2026-09-29 EKLENTİSİ (bilinen sınırlama giderildi): main.py'nin
+# scheduler'ı bot.py'yi SADECE 11:00/18:45'te tetikliyor (çakışmaz,
+# farklı saatler) -- ama biri (Render shell'den elle, ya da ileride bir
+# admin ucu eklenirse) bot.py'yi ayrıca manuel çalıştırırsa, bu ikinci
+# süreç zamanlanmış taramayla ÜST ÜSTE binip aynı anda dosyalar.db'ye
+# yazabilirdi (WAL+busy_timeout bunu kısmen tolere eder ama garanti
+# vermez, ayrıca aynı PDF'lerin iki kez indirilmesi gibi gereksiz işe
+# yol açar). Basit bir dosya kilidi: kilit dosyası VARSA ve 35 dakikadan
+# YENİYSE (normal bir taramanın süresinden fazla, main.py'deki 30 dk'lık
+# subprocess.run timeout'una güvenlik payı eklenmiş hali) ikinci süreç
+# hemen çıkar. Daha eskiyse (önceki süreç çökmüş/tıkanmış olabilir) STALE
+# kabul edilip üzerine yazılır -- sonsuza kadar kilitli kalmaz.
+_KILIT_DOSYASI = os.path.join(VERI_DIZINI, "tarama.kilit")
+_KILIT_STALE_DAKIKA = 35
+
+
+def _tarama_kilidini_al():
+    if os.path.exists(_KILIT_DOSYASI):
+        yas_dakika = (time.time() - os.path.getmtime(_KILIT_DOSYASI)) / 60
+        if yas_dakika < _KILIT_STALE_DAKIKA:
+            print(f"⊘ Başka bir tarama zaten çalışıyor gibi görünüyor (kilit {yas_dakika:.1f} dk önce oluşturulmuş) -- bu çalıştırma atlanıyor.")
+            return False
+        print(f"! Kilit dosyası {yas_dakika:.1f} dk önce oluşturulmuş (bayat/çökmüş süreç olabilir), üzerine yazılıyor.")
+    with open(_KILIT_DOSYASI, "w", encoding="utf-8") as f:
+        f.write(datetime.now().isoformat())
+    return True
+
+
+def _tarama_kilidini_birak():
+    try:
+        os.remove(_KILIT_DOSYASI)
+    except FileNotFoundError:
+        pass
+
+
 if __name__ == "__main__":
-    botu_calistir()
+    if _tarama_kilidini_al():
+        try:
+            botu_calistir()
+        finally:
+            _tarama_kilidini_birak()
