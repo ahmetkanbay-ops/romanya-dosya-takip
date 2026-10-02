@@ -690,8 +690,8 @@ def tarama_gecmisi_html(taramalar):
         for t in taramalar:
             baslik = f"{_tarama_gecmisi_zamani_goster(t['zaman'])} — {_e(t['tur']).upper()}"
             ozet = (
-                f"{t['toplam_pdf']} PDF bulundu, {t['kayit']} kayıt işlendi "
-                f"({t['yeni_sayi']} yeni, {t['yeni_pdf']} yeni PDF dosyasında)"
+                f"{t['toplam_pdf']} PDF bulundu, {t['kayit']} kayıt işlendi -- "
+                f"{t['yeni_sayi']} yeni kayıt ({t['yeni_pdf']} farklı PDF'ten geldi)"
             )
             if t["gruplar"]:
                 grup_html_parcalari = []

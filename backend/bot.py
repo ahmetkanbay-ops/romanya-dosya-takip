@@ -1221,8 +1221,16 @@ def botu_calistir():
     kontrol_conn.close()
 
     print(f"\n{'='*60}")
-    print(f"[İŞLEM TAMAM] Toplam {indirilen} yeni PDF indirildi, {kaydedilen_kayit} kayıt işlendi "
-          f"({len(tum_yeni_kayitlar)} tanesi yeni).")
+    # 2026-10-02 DUZELTMESI (kullanici fark etti -- mail/panel celiskili
+    # gorunuyordu): "indirilen" bu TURDA AGDAN CEKILEN PDF sayisidir --
+    # cari yilin dosyasi her taramada yeniden indirildigi icin (bkz.
+    # _guncel_yil_dosyasi_mi) bu sayinin cogu/tamami ZATEN BILINEN, hic
+    # yeni kayit tasimayan dosyalarin tazelenmis kopyasi olabilir. Bunu
+    # "yeni PDF" diye adlandirmak yaniltici -- gercek "yeni" sayisi
+    # tum_yeni_kayitlar (veritabaninda daha once olmayan kayitlar).
+    print(f"[İŞLEM TAMAM] {toplam_pdf_bulunan} PDF bulundu, {indirilen} PDF indirildi/güncellendi "
+          f"(cari yıl dosyaları dahil), {kaydedilen_kayit} kayıt işlendi, "
+          f"{len(tum_yeni_kayitlar)} GERÇEKTEN yeni kayıt.")
     print(f"{'='*60}")
 
     # 2026-08-15: kullanıcı isteğiyle eklendi -- "servis dışı" banner'ı
@@ -1252,11 +1260,15 @@ def botu_calistir():
     # bağlantı açılıyor.
     try:
         _olay_conn = veritabani_baglantisi(DB_FILE)
+        # ÖNEMLİ: main.py'deki "son 7 gün" istatistiği bu metni regex ile
+        # ayrıştırıyor -- "N PDF bulundu" ve "(N yeni)" kalıpları AYNEN
+        # korunmalı, değiştirilirse main.py'deki regex de güncellenmeli.
         sistem_olayi_kaydet(
             _olay_conn,
             "tarama_tamamlandi",
             f"{toplam_pdf_bulunan} PDF bulundu, {kaydedilen_kayit} kayıt işlendi "
-            f"({len(tum_yeni_kayitlar)} yeni), {indirilen} yeni PDF indirildi.",
+            f"({len(tum_yeni_kayitlar)} yeni). {indirilen} PDF indirildi/güncellendi "
+            f"(cari yıl dosyaları her taramada yeniden indirilir, bu sayı yeni içerik anlamına gelmez).",
         )
         _olay_conn.close()
     except Exception as e:
