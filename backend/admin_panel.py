@@ -25,7 +25,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-from dosya_utils import ROMANYA_SAAT_DILIMI, kategori_yolu_goster, tarama_taze_mi
+from dosya_utils import ROMANYA_SAAT_DILIMI, kategori_yolu_goster, tarama_taze_mi, tarama_ozet_metni
 
 # 2026-08-19 DÜZELTMESİ (kullanıcı fark etti, verileri panelle çapraz
 # doğruladıktan sonra sordu): rakamların KENDİSİ hep doğruydu ama "bugün/
@@ -633,14 +633,14 @@ def tarama_gecmisi_verisini_getir(conn, limit=30):
     """
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT tarama_zamani, tur, toplam_pdf_bulunan, kaydedilen_kayit, yeni_kayit_sayisi, yeni_pdf_sayisi "
+        "SELECT tarama_zamani, tur, toplam_pdf_bulunan, kaydedilen_kayit, yeni_kayit_sayisi, yeni_pdf_sayisi, indirilen_pdf_sayisi "
         "FROM tarama_gecmisi ORDER BY id DESC LIMIT ?",
         (limit,),
     )
     taramalar = cursor.fetchall()
 
     sonuc = []
-    for zaman, tur, toplam, kayit, yeni_sayi, yeni_pdf in taramalar:
+    for zaman, tur, toplam, kayit, yeni_sayi, yeni_pdf, indirilen in taramalar:
         gruplar = []
         if yeni_sayi:
             cursor.execute(
@@ -664,7 +664,8 @@ def tarama_gecmisi_verisini_getir(conn, limit=30):
             ]
         sonuc.append({
             "zaman": zaman, "tur": tur, "toplam_pdf": toplam, "kayit": kayit,
-            "yeni_sayi": yeni_sayi, "yeni_pdf": yeni_pdf, "gruplar": gruplar,
+            "yeni_sayi": yeni_sayi, "yeni_pdf": yeni_pdf, "indirilen": indirilen,
+            "gruplar": gruplar,
         })
     return sonuc
 
@@ -689,10 +690,14 @@ def tarama_gecmisi_html(taramalar):
         kartlar = []
         for t in taramalar:
             baslik = f"{_tarama_gecmisi_zamani_goster(t['zaman'])} — {_e(t['tur']).upper()}"
-            ozet = (
-                f"{t['toplam_pdf']} PDF bulundu, {t['kayit']} kayıt işlendi -- "
-                f"{t['yeni_sayi']} yeni kayıt ({t['yeni_pdf']} farklı PDF'ten geldi)"
-            )
+            # 2026-10-03: e-postaya giden tarama özetiyle AYNI cümle (bkz.
+            # dosya_utils.tarama_ozet_metni) -- kullanıcı admin panelindeki
+            # ve maile gelen metnin farklı olmasından rahatsız oldu, artık
+            # tek bir doğru kaynaktan geliyorlar. (Telegram'a bu olay zaten
+            # gitmiyor -- sadece kritik_uyari Telegram'a gidiyor.)
+            ozet = tarama_ozet_metni(t['toplam_pdf'], t['kayit'], t['yeni_sayi'], t['indirilen'])
+            if t['yeni_sayi']:
+                ozet += f" ({t['yeni_pdf']} farklı PDF'ten geldi.)"
             if t["gruplar"]:
                 grup_html_parcalari = []
                 for g in t["gruplar"]:

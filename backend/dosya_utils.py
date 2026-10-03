@@ -911,6 +911,16 @@ def tabloyu_hazirla(conn):
         )
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_tarama_gecmisi_zaman ON tarama_gecmisi(tarama_zamani)")
+    # 2026-10-03 EKLENTİSİ (kullanıcı fark etti -- admin panelindeki "Tarama
+    # Geçmişi" kartı ile e-postaya/Telegram'a giden özet FARKLI cümleler
+    # kullanıyordu, kafa karıştırıyordu): "indirilen" (bu turda ağdan
+    # çekilen PDF sayısı, cari yıl yeniden indirmeleri dahil) artık burada
+    # da saklanıyor ki admin paneli de TAM OLARAK aynı cümleyi (bkz.
+    # tarama_ozet_metni) kurabilsin -- tek bir doğru kaynak.
+    cursor.execute("PRAGMA table_info(tarama_gecmisi)")
+    if "indirilen_pdf_sayisi" not in {row[1] for row in cursor.fetchall()}:
+        cursor.execute("ALTER TABLE tarama_gecmisi ADD COLUMN indirilen_pdf_sayisi INTEGER NOT NULL DEFAULT 0")
+        print("! 'tarama_gecmisi' tablosuna 'indirilen_pdf_sayisi' kolonu eklendi (mevcut veri korunuyor).")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS tarama_yeni_kayitlar (
@@ -1025,7 +1035,27 @@ def yeni_kayitlar_ozeti(yeni_kayitlar, maks_kategori=4):
     return ", ".join(parcalar)
 
 
-def tarama_gecmisine_kaydet(conn, tur, tarama_zamani, toplam_pdf_bulunan, kaydedilen_kayit, yeni_kayitlar):
+def tarama_ozet_metni(toplam_pdf_bulunan, kaydedilen_kayit, yeni_kayit_sayisi, indirilen_pdf_sayisi):
+    """
+    2026-10-03 EKLENTİSİ (kullanıcı fark etti -- admin panelindeki "Tarama
+    Geçmişi" kartı ile e-postaya giden özet cümlesi FARKLI metinler
+    kullanıyordu, bu da kafa karıştırıyordu). TEK DOĞRU KAYNAK: bu fonksiyon
+    -- hem bot.py'nin e-posta/sistem_olayi metni hem admin_panel.py'nin
+    "Tarama Geçmişi" kartı AYNI cümleyi buradan alır, asla kendi ayrı
+    metnini kurmaz.
+
+    ÖNEMLİ: main.py'deki "son 7 gün" istatistiği bu metni regex ile
+    ayrıştırıyor -- "N PDF bulundu" ve "(N yeni)" kalıpları AYNEN
+    korunmalı, değiştirilirse main.py'deki regex de güncellenmeli.
+    """
+    return (
+        f"{toplam_pdf_bulunan} PDF bulundu, {kaydedilen_kayit} kayıt işlendi "
+        f"({yeni_kayit_sayisi} yeni). {indirilen_pdf_sayisi} PDF indirildi/güncellendi "
+        f"(cari yıl dosyaları her taramada yeniden indirilir, bu sayı yeni içerik anlamına gelmez)."
+    )
+
+
+def tarama_gecmisine_kaydet(conn, tur, tarama_zamani, toplam_pdf_bulunan, kaydedilen_kayit, yeni_kayitlar, indirilen_pdf_sayisi=0):
     """
     Bir taramanin ozetini + (varsa) her yeni kaydin detayini kalici olarak
     yazar. yeni_kayitlar: bot.py'nin zaten topladigi
@@ -1040,10 +1070,10 @@ def tarama_gecmisine_kaydet(conn, tur, tarama_zamani, toplam_pdf_bulunan, kayded
     cursor.execute(
         """
         INSERT INTO tarama_gecmisi
-        (tarama_zamani, tur, toplam_pdf_bulunan, kaydedilen_kayit, yeni_kayit_sayisi, yeni_pdf_sayisi)
-        VALUES (?, ?, ?, ?, ?, ?)
+        (tarama_zamani, tur, toplam_pdf_bulunan, kaydedilen_kayit, yeni_kayit_sayisi, yeni_pdf_sayisi, indirilen_pdf_sayisi)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (tarama_zamani, tur, toplam_pdf_bulunan, kaydedilen_kayit, len(yeni_kayitlar), len(yeni_pdf_adlari)),
+        (tarama_zamani, tur, toplam_pdf_bulunan, kaydedilen_kayit, len(yeni_kayitlar), len(yeni_pdf_adlari), indirilen_pdf_sayisi),
     )
     for kayit in yeni_kayitlar:
         cursor.execute(

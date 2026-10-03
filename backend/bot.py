@@ -88,6 +88,7 @@ from dosya_utils import (
     sistem_olayi_kaydet,
     bekleme_kuyrugunu_guncelle,
     tarama_gecmisine_kaydet,
+    tarama_ozet_metni,
     yeni_kayitlar_ozeti,
     kategori_yolu_goster,
     ROMANYA_SAAT_DILIMI,
@@ -1260,15 +1261,13 @@ def botu_calistir():
     # bağlantı açılıyor.
     try:
         _olay_conn = veritabani_baglantisi(DB_FILE)
-        # ÖNEMLİ: main.py'deki "son 7 gün" istatistiği bu metni regex ile
-        # ayrıştırıyor -- "N PDF bulundu" ve "(N yeni)" kalıpları AYNEN
-        # korunmalı, değiştirilirse main.py'deki regex de güncellenmeli.
+        # 2026-10-03: metin artık dosya_utils.tarama_ozet_metni'nden geliyor
+        # -- admin panelindeki "Tarama Geçmişi" kartı da AYNI fonksiyonu
+        # kullanıyor, böylece e-posta ile admin paneli birbirini tutuyor.
         sistem_olayi_kaydet(
             _olay_conn,
             "tarama_tamamlandi",
-            f"{toplam_pdf_bulunan} PDF bulundu, {kaydedilen_kayit} kayıt işlendi "
-            f"({len(tum_yeni_kayitlar)} yeni). {indirilen} PDF indirildi/güncellendi "
-            f"(cari yıl dosyaları her taramada yeniden indirilir, bu sayı yeni içerik anlamına gelmez).",
+            tarama_ozet_metni(toplam_pdf_bulunan, kaydedilen_kayit, len(tum_yeni_kayitlar), indirilen),
         )
         _olay_conn.close()
     except Exception as e:
@@ -1284,6 +1283,7 @@ def botu_calistir():
             _tarih_conn, "gunluk",
             datetime.now(ROMANYA_SAAT_DILIMI).strftime("%Y-%m-%d %H:%M:%S"),
             toplam_pdf_bulunan, kaydedilen_kayit, tum_yeni_kayitlar,
+            indirilen_pdf_sayisi=indirilen,
         )
         _tarih_conn.close()
     except Exception as e:
