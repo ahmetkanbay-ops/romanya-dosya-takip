@@ -84,6 +84,7 @@ from dosya_utils import (
     sira_tahmini_hesapla,
     ziyaretci_sayisini_oku,
     yeni_ziyaretci_kaydet,
+    playstore_gunluk_ozeti,
     _BEKLEME_KUYRUGU_ALT_KATEGORILERI,
 )
 from hukuki_metinler import (
@@ -96,6 +97,11 @@ from admin_panel import (
     metrikleri_hesapla, admin_sayfa_html, admin_giris_html,
     bugunun_durumu_html_getir, bugunun_durumu_verisini_getir,
     tarama_gecmisi_verisini_getir, tarama_gecmisi_html, ziyaret_takibi_html,
+    playstore_html,
+)
+from playstore_raporlari import (
+    playstore_gunluk_raporlari_guncelle,
+    playstore_satis_bildirimini_kontrol_et,
 )
 from tanitim_sayfasi import tanitim_sayfasi_html
 
@@ -791,6 +797,21 @@ def push_receiptlerini_kontrol_et_job():
         print(f"✗ Push receipt kontrolü hatası: {e}")
 
 
+def playstore_raporlarini_kontrol_et_job():
+    """2026-10-03 EKLENTİSİ (kullanıcı isteği): Play Store'un günlük
+    ziyaretçi/indirme CSV'lerini çeker + ilk gerçek satışta Telegram'a
+    özet bildirimi gönderir. GOOGLE_PLAYSTORE_SA_JSON ayarlı değilse
+    (bkz. playstore_raporlari.py) her iki fonksiyon da sessizce atlar --
+    günde 1 kez yeterli, Google'ın verisi zaten günler gecikmeli geliyor."""
+    try:
+        sonuc1 = playstore_gunluk_raporlari_guncelle()
+        sonuc2 = playstore_satis_bildirimini_kontrol_et()
+        if sonuc1.get("durum") == "tamam" or sonuc2.get("durum") == "bildirildi":
+            print(f"✓ Play Store raporları: {sonuc1}, {sonuc2}")
+    except Exception as e:
+        print(f"✗ Play Store rapor kontrolü hatası: {e}")
+
+
 # 2026-08-18: eski @app.on_event("startup"/"shutdown") -- FastAPI'de
 # deprecated, ileride tamamen kaldırılacak (bkz. DeprecationWarning).
 # Yerine önerilen "lifespan" context manager kullanılıyor. ÖNEMLİ: bu
@@ -898,6 +919,17 @@ async def lifespan(_app: FastAPI):
         minutes=15,
         id='push_receipt_kontrolu',
         name='Push Receipt Kontrolü'
+    )
+    # 2026-10-03: Play Store günlük istatistik/satış raporu kontrolü --
+    # Google'ın verisi zaten 3-7 gün gecikmeli geldiği için günde 1 kez
+    # (sabah, taramalardan önce) yeterli, daha sık çalıştırmanın faydası yok.
+    scheduler.add_job(
+        playstore_raporlarini_kontrol_et_job,
+        'cron',
+        hour='8',
+        minute='0',
+        id='playstore_rapor_kontrolu',
+        name='Play Store Rapor Kontrolü'
     )
     scheduler.start()
     print(f"\n✓ Scheduler başlatıldı!")
@@ -1236,6 +1268,22 @@ def admin_beni_sayma(request: Request, ac: int = 1):
     else:
         yanit.delete_cookie(ZIYARET_HARIC_COOKIE_ADI)
     return yanit
+
+
+@app.get("/admin/playstore", response_class=HTMLResponse)
+def admin_playstore(request: Request):
+    """2026-10-03 (kullanıcı isteği): Play Store'un GÜNLÜK ziyaretçi/indirme
+    sayısını gösteren sayfa. Google'ın verisi 3-7 gün gecikmeli geldiği için
+    (bkz. playstore_raporlari.py modül başı notu), en güncel birkaç gün her
+    zaman boş görünebilir -- bu bir hata değil."""
+    if not _admin_oturum_dogrula(request):
+        return RedirectResponse(url="/admin/giris", status_code=303)
+    conn = veritabani_baglantisi(DB_FILE)
+    try:
+        ozet = playstore_gunluk_ozeti(conn)
+    finally:
+        conn.close()
+    return playstore_html(ozet)
 
 
 @app.get("/admin/giris", response_class=HTMLResponse)

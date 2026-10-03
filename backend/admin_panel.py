@@ -893,6 +893,104 @@ def ziyaret_takibi_html(ozet, haric_aktif):
 </html>"""
 
 
+def playstore_html(ozet):
+    """2026-10-03 (kullanıcı isteği): /admin/playstore -- Google Play'in
+    GÜNLÜK ziyaretçi/indirme/kaldırma raporu. Google bu veriyi 3-7 gün
+    gecikmeli yayınladığı için en güncel birkaç gün boş görünür -- hata
+    değil, sayfada da açıkça yazıyor."""
+    gunler = ozet["gunler"]
+
+    if gunler:
+        satirlar = []
+        for g in gunler:
+            yy = g["yeni_yukleme"]
+            kl = g["kaldirma"]
+            zy = g["ziyaretci"]
+            satirlar.append(f"""
+            <tr>
+              <td>{_ziyaret_gunu_goster(g['gun'])}</td>
+              <td class="sayi"><b>{zy if zy is not None else '—'}</b></td>
+              <td class="sayi">{yy if yy is not None else '—'}</td>
+              <td class="sayi soluk">{kl if kl is not None else '—'}</td>
+            </tr>""")
+        tablo = f"""
+        <table>
+          <thead><tr><th>Gün</th><th class="sayi">Ziyaretçi</th><th class="sayi">Yeni yükleme</th><th class="sayi">Kaldırma</th></tr></thead>
+          <tbody>{''.join(satirlar)}</tbody>
+        </table>"""
+        toplam_yukleme_7 = sum((g["yeni_yukleme"] or 0) for g in gunler[:7])
+        toplam_ziyaretci_7 = sum((g["ziyaretci"] or 0) for g in gunler[:7])
+    else:
+        tablo = ('<p class="bos">Henüz veri yok. Google bu raporları 3-7 gün gecikmeli yayınlıyor -- '
+                 'kurulumdan hemen sonra burası birkaç gün boş kalabilir, bu bir hata değil.</p>')
+        toplam_yukleme_7 = toplam_ziyaretci_7 = 0
+
+    son_guncelleme = ozet["son_guncelleme"] or "—"
+
+    return f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Play Store — Romanya Dosya Takip</title>
+{_ADMIN_PWA_HEAD}
+<style>
+  :root {{
+    --lacivert-koyu: {LACIVERT_KOYU}; --lacivert: {LACIVERT}; --altin: {ALTIN};
+    --zemin: #f6f7fb; --yuzey: #ffffff; --kenar: #e4e7ee;
+    --metin: #1c2433; --metin-ikincil: #6b7280;
+  }}
+  * {{ box-sizing: border-box; }}
+  body {{ margin: 0; padding: 32px 20px 60px; background: var(--zemin); color: var(--metin);
+         font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }}
+  .sayfa {{ max-width: 860px; margin: 0 auto; }}
+  header.ustbilgi {{ display: flex; justify-content: space-between; align-items: baseline;
+                    margin-bottom: 22px; flex-wrap: wrap; gap: 8px; }}
+  header.ustbilgi h1 {{ font-size: 20px; margin: 0; color: var(--lacivert-koyu); }}
+  header.ustbilgi a {{ font-size: 12.5px; color: var(--metin-ikincil); }}
+  .kartlar {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 14px; }}
+  .kart {{ background: var(--yuzey); border: 1px solid var(--kenar); border-radius: 10px; padding: 14px 16px; }}
+  .kart .et {{ font-size: 11.5px; color: var(--metin-ikincil); text-transform: uppercase; letter-spacing: .04em; }}
+  .kart .deger {{ font-size: 26px; font-weight: 700; color: var(--lacivert-koyu); font-variant-numeric: tabular-nums; }}
+  .kart .alt {{ font-size: 11.5px; color: var(--metin-ikincil); }}
+  .not {{ background: #fff7e6; border: 1px solid #f0d9a8; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin: 12px 0; }}
+  .genis-kart {{ background: var(--yuzey); border: 1px solid var(--kenar); border-radius: 10px; padding: 16px 18px; margin-top: 12px; overflow-x: auto; }}
+  table {{ width: 100%; border-collapse: collapse; font-size: 13.5px; }}
+  th {{ text-align: left; font-size: 11.5px; color: var(--metin-ikincil); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--kenar); }}
+  td {{ padding: 7px 8px; border-bottom: 1px solid var(--kenar); }}
+  tr:last-child td {{ border-bottom: none; }}
+  .sayi {{ text-align: right; font-variant-numeric: tabular-nums; }}
+  .soluk {{ color: var(--metin-ikincil); }}
+  p.bos {{ color: var(--metin-ikincil); font-size: 13px; font-style: italic; }}
+  .aciklama {{ font-size: 12px; color: var(--metin-ikincil); line-height: 1.5; margin-top: 14px; }}
+  footer.altbilgi {{ text-align: center; font-size: 11.5px; color: var(--metin-ikincil); margin-top: 30px; }}
+</style>
+</head>
+<body>
+<div class="sayfa">
+  <header class="ustbilgi">
+    <h1>📊 Play Store (günlük)</h1>
+    <a href="/admin">← Panele dön</a>
+  </header>
+  <div class="not">⏳ Google bu verileri <b>3-7 gün gecikmeli</b> yayınlıyor -- bugünü ve dünü burada
+    görmemen normal, en güncel satır genelde geçen haftadan.</div>
+  <div class="kartlar">
+    <div class="kart"><div class="et">Son 7 gün ziyaretçi</div><div class="deger">{toplam_ziyaretci_7}</div><div class="alt">mağaza sayfası</div></div>
+    <div class="kart"><div class="et">Son 7 gün yeni yükleme</div><div class="deger">{toplam_yukleme_7}</div><div class="alt">toplam</div></div>
+    <div class="kart"><div class="et">Son güncelleme</div><div class="deger" style="font-size:15px">{son_guncelleme}</div><div class="alt">sunucu kontrol zamanı</div></div>
+  </div>
+  <div class="genis-kart">{tablo}</div>
+  <p class="aciklama">
+    <b>Ziyaretçi</b>: Play Store'da uygulama sayfasına giren benzersiz kişi sayısı (Google'ın kendi raporu).
+    <b>Yeni yükleme / Kaldırma</b>: o gün için Google'ın bildirdiği net kurulum/kaldırma.
+    Satış bildirimi ayrıca Telegram'a gidiyor (ilk gerçek satıştan sonra başlayacak).
+  </p>
+  <footer class="altbilgi">Romanya Dosya Takip — tarihler Google'ın raporladığı gündür.</footer>
+</div>
+</body>
+</html>"""
+
+
 _ADMIN_PWA_HEAD = """
 <link rel="manifest" href="/admin/manifest.json">
 <meta name="theme-color" content="#0f1a2e">
@@ -1104,7 +1202,7 @@ def admin_sayfa_html(m):
 <div class="sayfa">
   <header class="ustbilgi">
     <h1><img class="profil-avatar" src="/statik/admin/profil-foto.jpg" alt=""> Admin Paneli</h1>
-    <span class="zaman">Oluşturulma: {m['olusturma_zamani']} · <a href="/admin/tarama-gecmisi" style="color:var(--metin-ikincil)">Tarama Geçmişi →</a> · <a href="/admin/ziyaretler" style="color:var(--metin-ikincil)">Ziyaretçiler →</a></span>
+    <span class="zaman">Oluşturulma: {m['olusturma_zamani']} · <a href="/admin/tarama-gecmisi" style="color:var(--metin-ikincil)">Tarama Geçmişi →</a> · <a href="/admin/ziyaretler" style="color:var(--metin-ikincil)">Ziyaretçiler →</a> · <a href="/admin/playstore" style="color:var(--metin-ikincil)">Play Store →</a></span>
   </header>
 
   <div class="bolum">

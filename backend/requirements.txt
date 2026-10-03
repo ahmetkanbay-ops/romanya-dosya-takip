@@ -71,3 +71,9 @@ python-multipart==0.0.32
 # geri getirebiliyor.
 pywebpush==1.14.1
 py-vapid==1.9.0
+
+# 2026-10-03: Play Store'un günlük ziyaretçi/indirme/satış raporlarını
+# (Google'ın kendi Cloud Storage bucket'ı, bkz. playstore_raporlari.py)
+# okumak için. GOOGLE_PLAYSTORE_SA_JSON ortam değişkeni ayarlı değilse
+# bu paket kuruluysa da devre dışı kalır (B2/Sentry ile aynı desen).
+google-cloud-storage==3.16.0

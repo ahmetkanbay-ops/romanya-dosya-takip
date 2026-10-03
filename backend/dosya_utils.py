@@ -583,6 +583,26 @@ def ziyaret_gunluk_ozeti(conn, gun_sayisi=60):
     }
 
 
+def playstore_gunluk_ozeti(conn, gun_sayisi=60):
+    """Admin sayfasi icin: Play Store'un GUNLUK yukleme/kaldirma/ziyaretci
+    raporu, en yeni gun en ustte. Bu veri Google'dan 3-7 gun gecikmeli
+    geldigi icin (bkz. playstore_raporlari.py), son birkac gun bos gorunebilir
+    -- bu bir hata degil."""
+    satirlar = conn.execute(
+        """
+        SELECT gun, yeni_yukleme, kaldirma, ziyaretci, guncelleme_zamani
+        FROM playstore_gunluk ORDER BY gun DESC LIMIT ?
+        """,
+        (gun_sayisi,),
+    ).fetchall()
+    gunler = [
+        {"gun": g, "yeni_yukleme": yy, "kaldirma": k, "ziyaretci": z, "guncelleme_zamani": gz}
+        for g, yy, k, z, gz in satirlar
+    ]
+    son_guncelleme = gunler[0]["guncelleme_zamani"] if gunler else None
+    return {"gunler": gunler, "son_guncelleme": son_guncelleme}
+
+
 def guvenli_commit(conn, deneme=4):
     """conn.commit()'i, geçici 'database is locked' / 'disk I/O error'
     durumlarında artan bekleme süreleriyle birkaç kez yeniden dener.
@@ -980,6 +1000,32 @@ def tabloyu_hazirla(conn):
         CREATE TABLE IF NOT EXISTS ziyaret_haric_gunluk (
             gun TEXT PRIMARY KEY,
             sayi INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+
+    # 2026-10-03 EKLENTİSİ (kullanıcı isteği -- Play Store'da günlük kaç
+    # kişinin uygulama sayfasını ziyaret ettiğini/indirdiğini admin panelden
+    # takip edebilmek): Google'ın kendi raporları (Cloud Storage'daki
+    # pubsite_prod_* bucket'ı, bkz. playstore_raporlari.py) GÜNLÜK veri
+    # içeriyor ama 3-7 gün gecikmeli geliyor -- bu yüzden "gün" burada
+    # geçmişe dönük yazılan/güncellenen bir satır, "şu an" değil.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS playstore_gunluk (
+            gun TEXT PRIMARY KEY,
+            yeni_yukleme INTEGER,
+            kaldirma INTEGER,
+            ziyaretci INTEGER,
+            guncelleme_zamani TEXT NOT NULL
+        )
+    """)
+    # Satış raporunda (Google'da henüz hiç oluşmamış -- ilk sipariş sonrası
+    # ortaya çıkacak) en son görülen dosyanın "durumunu" (ETag/satır sayısı)
+    # saklar; her gün aynı günlük bildirimi tekrar tekrar göndermemek için.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS playstore_satis_durumu (
+            anahtar TEXT PRIMARY KEY,
+            son_deger TEXT NOT NULL,
+            zaman TEXT NOT NULL
         )
     """)
 
