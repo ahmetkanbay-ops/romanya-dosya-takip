@@ -31,8 +31,12 @@ from zoneinfo import ZoneInfo
 ROMANYA_SAAT_DILIMI = ZoneInfo("Europe/Bucharest")
 
 # Planli tarama takvimi (main.py lifespan ile AYNI olmali): sadece hafta ici
-# 11:00 ve 18:45 (Romanya saati), Cumartesi/Pazar kapali.
-PLANLI_TARAMA_SAATLERI = ((18, 45), (11, 0))
+# 10:00 / 15:00 / 18:30 (Romanya saati), Cumartesi/Pazar kapali.
+# 2026-10-05 GUNCELLEMESI (kullanici karari): 11:00/18:45'ten 3 saate
+# cikarildi -- bir dosya kararnamesi iki eski tarama arasindaki boslukta
+# yayinlanmis, kullanici bunu kendi uygulamasindan degil sosyal medyadan
+# ogrenmek zorunda kalmisti.
+PLANLI_TARAMA_SAATLERI = ((18, 30), (15, 0), (10, 0))
 
 
 def son_planli_tarama_zamani(simdi):
@@ -50,7 +54,7 @@ def son_planli_tarama_zamani(simdi):
 
 def tarama_taze_mi(tarama_zamani, simdi, tolerans_saat=2):
     """Son basarili tarama takvime gore taze mi? Hafta sonu bosluguna (Cuma
-    18:45 -> Pazartesi 11:00) duyarli: eski sabit 'x saat' esigi hafta
+    18:30 -> Pazartesi 10:00) duyarli: eski sabit 'x saat' esigi hafta
     sonu sahte alarm uretiyordu. Planli bir tarama zamani `tolerans_saat`
     gectiyse ve ondan sonra basarili tarama yoksa bayat sayilir."""
     slot = son_planli_tarama_zamani(simdi - timedelta(hours=tolerans_saat))

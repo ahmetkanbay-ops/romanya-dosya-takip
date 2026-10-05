@@ -56,30 +56,35 @@ eşik/karşılaştırma yapılan her yerde `ROMANYA_SAAT_DILIMI` (Europe/Buchare
 
 ## cetatenie.just.ro'ya nazik davran
 
-Bot hafta içi (Pzt-Cuma) günde 2 kez (11:00 ve 18:45, Romanya saati)
-tarıyor -- 2026-09-02'de kullanıcının bilinçli kararıyla 1x'ten 2x'e
-çıkarıldı (gerekçe: aynı gün eklenen bir PDF'in "1 gün geç" görünmesi
-güven sarsıcı bir izlenim riski taşıyordu).
+Bot hafta içi (Pzt-Cuma) günde 3 kez (10:00, 15:00 ve 18:30, Romanya
+saati) tarıyor -- 2026-09-02'de kullanıcının bilinçli kararıyla 1x'ten
+2x'e çıkarıldı (gerekçe: aynı gün eklenen bir PDF'in "1 gün geç"
+görünmesi güven sarsıcı bir izlenim riski taşıyordu).
 2026-09-15/16'da SAAT ve GÜN kısıtlaması veriye dayalı güncellendi (bkz.
 hafıza notu pdf-web-yukleme-zamani-ozelligi): 235 gerçek PDF'in sunucu
 Last-Modified zamanı analiz edildi, Cumartesi/Pazar HİÇ yükleme
 olmadığı (0/235) ve en geç yüklemenin 18:18 (Romanya saati) olduğu
-kanıtlandı -- 2. tarama bu yüzden 18:45'e çekildi (mesai bitişine
-güvenli pay). **Cumartesi VE Pazar artık TAMAMEN kapalı** -- run_bot
-ikisinde de hiç çalışmıyor (kullanıcının 2026-09-16 net kararı: "hafta
-sonu boş geçsin"). Haftalık "derin tarama" (aşağıya bakın), eskiden
-Pazar'a bağlıyken artık **Cuma'nın SON (18:45) taramasına** taşındı --
-hafta sonu başlamadan hafta içi biriken PDF'lerin bütünlüğünü kontrol
-ediyor. SADECE Cuma günü, SADECE günün son (18:45) taramasının SONUNA
-eklenti olarak (sıklığı artırmadan) hafif bir "derin tarama" çalışır --
-PDF'lerin silinip silinmediğini/boyutunun değiştiğini HEAD isteğiyle
-kontrol eder (bkz. bot.py `_derin_tarama_gunu_mu`).
-Bundan DAHA SIK polling/retry EKLEME. 5x/gün (2 saatte bir) yapıldığında
-site IP'yi bloke etmişti (2026-08-15) -- 2x/gün hâlâ ölçülü ama İLK
-BİRKAÇ HAFTA Gözcü'nün "Günlük Tarama" durumu yakından izlenmeli;
-WAF/erişim sorunu belirtisi görülürse hemen 1x/gün'e (main.py
-`lifespan()` içindeki `scheduler.add_job` çağrılarından birini kaldır)
-geri dönülmeli.
+kanıtlandı -- son tarama bu yüzden akşama (18:30'a) çekildi. **Cumartesi
+VE Pazar artık TAMAMEN kapalı** -- run_bot hiçbirinde çalışmıyor
+(kullanıcının 2026-09-16 net kararı: "hafta sonu boş geçsin"). Haftalık
+"derin tarama" (aşağıya bakın), eskiden Pazar'a bağlıyken artık
+**Cuma'nın SON (18:30) taramasına** taşındı -- hafta sonu başlamadan
+hafta içi biriken PDF'lerin bütünlüğünü kontrol ediyor. SADECE Cuma
+günü, SADECE günün son taramasının SONUNA eklenti olarak (sıklığı
+artırmadan) hafif bir "derin tarama" çalışır -- PDF'lerin silinip
+silinmediğini/boyutunun değiştiğini HEAD isteğiyle kontrol eder (bkz.
+bot.py `_derin_tarama_gunu_mu`).
+
+2026-10-05 GÜNCELLEMESİ (kullanıcı kararı): 2x/gün'den 3x/gün'e
+çıkarıldı (10:00 eklendi) -- gerekçe: o gün bir dosya kararnamesi eski
+iki tarama saati (11:00/18:45) arasındaki boşlukta yayınlanmış,
+kullanıcı bunu KENDİ UYGULAMASINDAN değil sosyal medyadan öğrenmek
+zorunda kalmıştı. Bundan DAHA SIK polling/retry EKLEME. 5x/gün (2
+saatte bir) yapıldığında site IP'yi bloke etmişti (2026-08-15) -- 3x/gün
+hâlâ ölçülü ama İLK BİRKAÇ HAFTA Gözcü'nün "Günlük Tarama" durumu
+yakından izlenmeli; WAF/erişim sorunu belirtisi görülürse hemen geri
+düşülmeli (main.py `lifespan()` içindeki `scheduler.add_job`
+çağrılarından birini kaldır -- önce 2x'e, gerekirse 1x'e).
 
 ## Güvenlik başlıkları (CSP)
 

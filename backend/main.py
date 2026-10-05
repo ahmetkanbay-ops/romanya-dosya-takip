@@ -860,21 +860,32 @@ async def lifespan(_app: FastAPI):
     # ARTMADI, sadece saat kaydırıldı -- yine de ilk birkaç hafta Gözcü'nün
     # "Günlük Tarama" durumu izlenmeli (bkz. [[tarama-sikligi-2x-izleme]]).
     #
-    # 2026-09-16 GÜNCELLEMESİ (kullanıcı kararı, SON hâl): Cumartesi VE
-    # Pazar artık TAMAMEN boş -- run_bot İKİSİNDE de hiç çalışmıyor.
-    # (2026-09-15'te önce sadece Cumartesi kaldırılıp Pazar'a tek bir
-    # 18:45 çalıştırması bırakılmıştı çünkü haftalık "derin tarama" ona
-    # bağımlıydı -- kullanıcı bir gün sonra "Pazar da tamamen boş kalsın"
-    # diye kararını netleştirdi.) Derin tarama artık bot.py
-    # _derin_tarama_gunu_mu içinde CUMA gününün SON (18:45) taramasına
-    # taşındı -- hafta sonu başlamadan, hafta içi biriken PDF'lerin
-    # bütünlüğünü kontrol ediyor. Bu yüzden her iki job de sadece
+    # 2026-09-16 GÜNCELLEMESİ (kullanıcı kararı): Cumartesi VE Pazar
+    # TAMAMEN boş -- run_bot hiçbirinde çalışmıyor. (2026-09-15'te önce
+    # sadece Cumartesi kaldırılıp Pazar'a tek bir 18:45 çalıştırması
+    # bırakılmıştı çünkü haftalık "derin tarama" ona bağımlıydı --
+    # kullanıcı bir gün sonra "Pazar da tamamen boş kalsın" diye kararını
+    # netleştirdi.) Derin tarama bot.py _derin_tarama_gunu_mu içinde CUMA
+    # gününün SON taramasına bağlı (günün en geç saatine otomatik uyar,
+    # bkz. o fonksiyondaki "hour >= 18" şartı) -- hafta sonu başlamadan,
+    # hafta içi biriken PDF'lerin bütünlüğünü kontrol ediyor.
+    #
+    # 2026-10-05 GÜNCELLEMESİ (kullanıcı kararı): günde 2'den 3'e çıkarıldı
+    # (10:00 / 15:00 / 18:30) -- gerekçe: o gün bir dosya kararnamesi,
+    # mevcut iki tarama saati (11:00/18:45) arasındaki boşlukta siteye
+    # eklenmiş, kullanıcı bunu SOSYAL MEDYADA BAŞKALARININ paylaşımından
+    # öğrenmiş, kendi uygulaması henüz haberdar değilmiş -- bu kötü bir
+    # izlenim riski. BİLİNÇLİ RİSK: 2026-08-15'te site 5x/gün (2 saatte
+    # bir) taramada IP'yi bloke etmişti; 3x/gün hâlâ ondan uzak ama yine
+    # de bir artış -- ilk birkaç hafta Gözcü'nün "Günlük Tarama" durumu
+    # YAKINDAN izlenmeli, WAF/erişim sorunu belirtisi görülürse hemen geri
+    # düşülmeli (bkz. [[tarama-sikligi-3x-izleme]]). Üçü de sadece
     # 'mon-fri' -- Cumartesi/Pazar hiçbir job'da yok.
     scheduler.add_job(
         run_bot,
         'cron',
         day_of_week='mon-fri',
-        hour='11',
+        hour='10',
         minute='0',
         id='pdf_downloader_1',
         name='PDF Downloader Bot (1. tarama)'
@@ -883,10 +894,19 @@ async def lifespan(_app: FastAPI):
         run_bot,
         'cron',
         day_of_week='mon-fri',
-        hour='18',
-        minute='45',
+        hour='15',
+        minute='0',
         id='pdf_downloader_2',
-        name='PDF Downloader Bot (2. tarama, Cuma\'da derin tarama tetikleyicisi)'
+        name='PDF Downloader Bot (2. tarama)'
+    )
+    scheduler.add_job(
+        run_bot,
+        'cron',
+        day_of_week='mon-fri',
+        hour='18',
+        minute='30',
+        id='pdf_downloader_3',
+        name='PDF Downloader Bot (3. tarama, Cuma\'da derin tarama tetikleyicisi)'
     )
     # 2026-08-17: otomatik veritabanı yedeği, taramalardan ÖNCE (03:00'te,
     # gece en sakin saat) alınıyor -- bkz. veritabani_yedekle().
@@ -911,8 +931,8 @@ async def lifespan(_app: FastAPI):
     # 2026-09-28: push receipt kontrolü -- Expo'ya gönderilen ticket'ların
     # gerçekten telefona ulaşıp ulaşmadığını birkaç dakika sonra sorgular
     # (bkz. bildirim.py receiptleri_kontrol_et). 15 dakikada bir yeterli,
-    # gönderimler günde sadece 2 kez (11:00/18:45) olduğu için sık olmasına
-    # gerek yok.
+    # gönderimler günde sadece 3 kez (10:00/15:00/18:30) olduğu için sık
+    # olmasına gerek yok.
     scheduler.add_job(
         push_receiptlerini_kontrol_et_job,
         'interval',
@@ -933,7 +953,7 @@ async def lifespan(_app: FastAPI):
     )
     scheduler.start()
     print(f"\n✓ Scheduler başlatıldı!")
-    print(f"✓ Bot: SADECE hafta ici (Pzt-Cuma) 11:00 ve 18:45'te calisacak -- Cumartesi/Pazar tamamen kapali, derin tarama Cuma'nin son (18:45) taramasina eklendi")
+    print(f"✓ Bot: SADECE hafta ici (Pzt-Cuma) 10:00/15:00/18:30'da calisacak -- Cumartesi/Pazar tamamen kapali, derin tarama Cuma'nin son (18:30) taramasina eklendi")
     print(f"✓ Yedekleme: Her gün 03:00'te otomatik veritabanı yedeği alınacak (son {YEDEK_SAKLAMA_GUN_SAYISI} gün saklanır)")
     print(f"✓ Sonraki çalışma: Zamanı gelince otomatik çalışır\n")
 

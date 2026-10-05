@@ -676,15 +676,14 @@ def _derin_tarama_gunu_mu():
     TAMAMEN boş -- bakanlık zaten hafta sonu hiç PDF yayınlamıyor (bkz.
     hafıza notu pdf-web-yukleme-zamani-ozelligi, 235 PDF'lik canlı analiz).
     Önceden Pazar'a bağlı olan haftalık derin tarama artık Cuma'nın SON
-    taramasına (18:45) taşındı -- hafta sonu başlamadan önce, hafta içi
-    biriken PDF'lerin bütünlüğünü (silinme/boyut değişimi) kontrol etmiş
-    oluyoruz.
+    taramasına taşındı -- hafta sonu başlamadan önce, hafta içi biriken
+    PDF'lerin bütünlüğünü (silinme/boyut değişimi) kontrol etmiş oluyoruz.
 
-    2026-09-02 EKLENTİSİ (2x/gün'e geçiş sonrası önemli, hâlâ geçerli):
-    günlük tarama Cuma günü de İKİ KEZ çalışıyor (11:00 + 18:45) -- eğer
-    bu kontrol sadece "bugün cuma mı" olsaydı, derin tarama İLK
-    çalıştırmada (11:00) da tetiklenirdi. Bu yüzden ayrıca saat >= 18
-    şartı eklendi (sadece günün SON/akşam taramasında çalışsın) VE
+    2026-10-05 GÜNCELLEMESİ: günlük tarama artık ÜÇ KEZ çalışıyor
+    (10:00 / 15:00 / 18:30, bkz. main.py lifespan()) -- eğer bu kontrol
+    sadece "bugün cuma mı" olsaydı, derin tarama İLK çalıştırmada
+    (10:00) da tetiklenirdi. Bu yüzden ayrıca saat >= 18 şartı eklendi
+    (sadece günün SON/akşam taramasında çalışsın, şu an bu 18:30) VE
     sistem_olaylari'nda BUGÜN zaten bir derin_tarama_tamamlandi/
     derin_tarama_pas_gecildi kaydı var mı kontrol ediliyor -- varsa
     (aynı akşam taraması bir sebeple ikinci kez tetiklenirse) atlanır.
@@ -1185,7 +1184,7 @@ def botu_calistir():
 
         # 2026-09-02 (kullanıcı isteği), 2026-09-16'da Cuma akşamına
         # taşındı: haftalık hafif derin tarama -- SADECE Cuma günü SON
-        # (18:45) taramada, SADECE günlük tarama sitede erişim sorunu
+        # (2026-10-05'ten beri 18:30) taramada, SADECE günlük tarama sitede erişim sorunu
         # yaşamadıysa (aksi halde "o hafta pas geçildi" olarak kaydedilir,
         # sessizce atlanmaz). Ana taramayı ASLA engellememeli, bu yüzden
         # tamamen ayrı bir try/except içinde, browser kapanmadan ÖNCE
@@ -1316,7 +1315,7 @@ def botu_calistir():
 
 
 # 2026-09-29 EKLENTİSİ (bilinen sınırlama giderildi): main.py'nin
-# scheduler'ı bot.py'yi SADECE 11:00/18:45'te tetikliyor (çakışmaz,
+# scheduler'ı bot.py'yi SADECE 10:00/15:00/18:30'da tetikliyor (çakışmaz,
 # farklı saatler) -- ama biri (Render shell'den elle, ya da ileride bir
 # admin ucu eklenirse) bot.py'yi ayrıca manuel çalıştırırsa, bu ikinci
 # süreç zamanlanmış taramayla ÜST ÜSTE binip aynı anda dosyalar.db'ye

@@ -226,26 +226,27 @@ def _rt(y, a, g, s, d=0):
 
 
 def test_hafta_sonu_bosluk_sahte_alarm_uretmez():
+    # 2026-10-05: takvim 11:00/18:45 -> 10:00/15:00/18:30'a guncellendi.
     from dosya_utils import tarama_taze_mi
-    cuma_son = _rt(2026, 9, 18, 18, 50)
+    cuma_son = _rt(2026, 9, 18, 18, 30)
     assert tarama_taze_mi(cuma_son, _rt(2026, 9, 20, 1, 0))    # Pazar gecesi (bugunku alarm)
     assert tarama_taze_mi(cuma_son, _rt(2026, 9, 20, 9, 0))    # Pazar 09:00
-    assert tarama_taze_mi(cuma_son, _rt(2026, 9, 21, 10, 0))   # Pazartesi sabahi, tarama oncesi
-    assert tarama_taze_mi(cuma_son, _rt(2026, 9, 21, 12, 30))  # Pzt 11:00 taramasi henuz 2 saat gecmedi
+    assert tarama_taze_mi(cuma_son, _rt(2026, 9, 21, 9, 0))    # Pazartesi sabahi, tarama oncesi
+    assert tarama_taze_mi(cuma_son, _rt(2026, 9, 21, 11, 30))  # Pzt 10:00 taramasi henuz 2 saat gecmedi
 
 
 def test_kacirilan_tarama_hala_yakalanir():
     from dosya_utils import tarama_taze_mi
-    cuma_son = _rt(2026, 9, 18, 18, 50)
-    assert not tarama_taze_mi(cuma_son, _rt(2026, 9, 21, 13, 30))  # Pzt 11:00 taramasi yok
-    persembe = _rt(2026, 9, 17, 18, 50)
-    assert not tarama_taze_mi(persembe, _rt(2026, 9, 18, 14, 0))   # Cuma 11:00 kacti
+    cuma_son = _rt(2026, 9, 18, 18, 30)
+    assert not tarama_taze_mi(cuma_son, _rt(2026, 9, 21, 12, 30))  # Pzt 10:00 taramasi yok
+    persembe = _rt(2026, 9, 17, 18, 30)
+    assert not tarama_taze_mi(persembe, _rt(2026, 9, 18, 13, 0))   # Cuma 10:00 kacti
 
 
 def test_hafta_ici_normal_akis():
     from dosya_utils import tarama_taze_mi
-    assert tarama_taze_mi(_rt(2026, 9, 16, 11, 5), _rt(2026, 9, 16, 15, 0))
-    assert tarama_taze_mi(_rt(2026, 9, 16, 18, 50), _rt(2026, 9, 17, 9, 0))
+    assert tarama_taze_mi(_rt(2026, 9, 16, 10, 5), _rt(2026, 9, 16, 15, 0))
+    assert tarama_taze_mi(_rt(2026, 9, 16, 18, 30), _rt(2026, 9, 17, 9, 0))
 
 
 # --- ziyaretci gunluk takibi ---

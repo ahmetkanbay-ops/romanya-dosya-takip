@@ -20,7 +20,7 @@ Play Store'da (kapalı test aşamasında) gerçek kullanıcılara açılıyor.
 - **Backend** (`backend/`): FastAPI + SQLite (`dosyalar.db`, ~1.35M+
   satır), Render'da barındırılıyor (`romanya-dosya-takip.onrender.com`).
 - **Scraper** (`backend/bot.py`): Playwright/Chromium ile
-  cetatenie.just.ro'yu günde 2 kez tarayıp yeni PDF'leri indirip
+  cetatenie.just.ro'yu günde 3 kez tarayıp yeni PDF'leri indirip
   veritabanına işliyor.
 - **Mobil uygulama** (`app/`): Expo/React Native, Play Store kapalı test
   aşamasında (paket adı `com.knby.romanyadosyatakip`).
@@ -64,13 +64,16 @@ Global hesap listesi (bu projeye özel olmayanlar dahil) `~/.claude/CLAUDE.md`'d
 - **Cari yılın dosyası (`stadiu` için) her taramada yeniden indiriliyor**
   — çünkü site aynı dosya adını YERİNDE güncelliyor (`ordine` buna dahil
   değil, tek seferlik kararname).
-- **Tarama sıklığı: SADECE hafta içi günde 2 (11:00 + 18:45 Romanya
-  saati), Cumartesi/Pazar TAMAMEN kapalı** — haftalık derin tarama
-  Cuma'nın son (18:45) taramasına eklendi. 2026-09-15/16'da 235 PDF'in
-  gerçek sunucu yükleme zamanı analiz edilip saat/gün veriye dayalı
-  güncellendi (bkz. karar günlüğü).
-  Sıklık DAHA SIK artırılmamalı, site 5x/gün'de
-  bir kez IP'yi bloke etmişti.
+- **Tarama sıklığı: SADECE hafta içi günde 3 (10:00 + 15:00 + 18:30
+  Romanya saati), Cumartesi/Pazar TAMAMEN kapalı** — haftalık derin
+  tarama Cuma'nın son (18:30) taramasına eklendi. 2026-09-15/16'da 235
+  PDF'in gerçek sunucu yükleme zamanı analiz edilip saat/gün veriye
+  dayalı güncellendi (bkz. karar günlüğü). 2026-10-05'te 2'den 3'e
+  çıkarıldı (kullanıcı kararı — bir dosya kararnamesi eski iki tarama
+  arasındaki boşlukta yayınlanmış, kullanıcı bunu kendi uygulamasından
+  değil sosyal medyadan öğrenmişti). Sıklık BUNDAN DAHA FAZLA
+  artırılmamalı, site 5x/gün'de bir kez IP'yi bloke etmişti — 3x hâlâ
+  ölçülü ama ilk birkaç hafta Gözcü yakından izlenmeli.
 
 ## Bilinen sınırlamalar / kırılgan noktalar
 
@@ -86,7 +89,7 @@ Global hesap listesi (bu projeye özel olmayanlar dahil) `~/.claude/CLAUDE.md`'d
 - Sentry API token'ı salt-okunur — hatalar panelden elle "Resolve"
   edilmeli.
 - cetatenie.just.ro bir WAF arkasında ve tarama sıklığına hassas —
-  yukarıdaki "günde 2" sınırının üzerine çıkmadan önce mutlaka
+  yukarıdaki "günde 3" sınırının üzerine çıkmadan önce mutlaka
   kullanıcıyla konuşulmalı.
 - Site aynı dosya adını yerinde güncelleyebiliyor (cari yıl) — bu
   yüzden `/pdfs` statik dosyalarına agresif `Cache-Control` YOK
@@ -98,3 +101,10 @@ Kronolojik, konu başlıklarına göre organize tam karar günlüğü:
 [`docs/karar-gunlugu.md`](docs/karar-gunlugu.md) — Play Store süreci,
 güvenlik denetimi geçmişi, büyük arıza/kök-neden vakaları, mobil UI
 kararları, ve kullanıcıyla çalışma tarzı notları dahil.
+
+## Yetenek (skill) kurulum kuralı
+
+find-skills ile bulunan hiçbir yeteneği -g veya -y ile kurma.
+Kurmadan önce SKILL.md ve varsa scriptlerini oku; ağ erişimi, dosya silme,
+.env/anahtar okuma, dışarı veri gönderme veya gizlenmiş kod var mı raporla.
+Onayımı almadan kurma ve sadece proje kapsamına kur.
