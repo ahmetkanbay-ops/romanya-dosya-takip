@@ -1557,6 +1557,32 @@ def admin_pdf_listesi(_yetki=Depends(nobetci_anahtarini_dogrula)):
     }
 
 
+@app.get("/api/admin/gecici-playstore-senkron")
+def gecici_playstore_senkron(_yetki=Depends(nobetci_anahtarini_dogrula)):
+    """GEÇİCİ TEŞHİS UCU (2026-10-06, AGENTS.md "sadece canlıda test
+    edilebilir" deseni) -- yerel bir testte GOOGLE_PLAYSTORE_SA_JSON'ın
+    artık çalıştığı doğrulanırken kod gerçek bir Telegram bildirimi attı
+    (ilk satış, sales/salesreport_202610.zip, 1 satır) ama bunu LOKAL
+    veritabanına yazdı, production'a DEĞİL -- production'ın kendi 08:00
+    job'ı bunu hâlâ "yeni" sanıp YARIN aynı bildirimi bir kez daha
+    atacaktı. Bu uç, production veritabanına AYNI durumu (Telegram
+    GÖNDERMEDEN) yazıp o tekrarı önlüyor. Kullanıldıktan sonra KALDIRILIP
+    tekrar deploy edilecek."""
+    conn = veritabani_baglantisi(DB_FILE)
+    try:
+        conn.execute(
+            """
+            INSERT INTO playstore_satis_durumu (anahtar, son_deger, zaman) VALUES (?, ?, datetime('now'))
+            ON CONFLICT(anahtar) DO UPDATE SET son_deger = excluded.son_deger, zaman = excluded.zaman
+            """,
+            ("sales/salesreport_202610.zip", "1"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return {"durum": "senkronlandi"}
+
+
 @app.get("/api/admin/saglik-kontrolu")
 def admin_saglik_kontrolu(_yetki=Depends(nobetci_anahtarini_dogrula)):
     """Gece Nobeti (7/24 izleme, 2026-08-30) icin makineler-arasi saglik
